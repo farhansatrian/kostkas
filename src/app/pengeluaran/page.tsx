@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { ExpenseManagement } from "@/components/expense-management";
+import { getKostAppPreferences } from "@/lib/app-preferences";
 import { getExpensesPageData } from "@/lib/expense-reimbursement-service";
 import { APP_NAVIGATION_MODULES } from "@/lib/navigation";
 import { prisma } from "@/lib/prisma";
@@ -24,13 +25,16 @@ async function ExpensesContent({
 }) {
   const actor = await requireAuthenticatedActor();
   const resolvedParams = await searchParams;
-  const data = await getExpensesPageData(prisma, actor, {
-    period: resolvedParams.period,
-    categoryId: resolvedParams.categoryId,
-    memberId: resolvedParams.memberId,
-    fundingSource: resolvedParams.fundingSource,
-    status: resolvedParams.status,
-  });
+  const [data, preferences] = await Promise.all([
+    getExpensesPageData(prisma, actor, {
+      period: resolvedParams.period,
+      categoryId: resolvedParams.categoryId,
+      memberId: resolvedParams.memberId,
+      fundingSource: resolvedParams.fundingSource,
+      status: resolvedParams.status,
+    }),
+    getKostAppPreferences(prisma),
+  ]);
 
   return (
     <AppShell
@@ -38,6 +42,7 @@ async function ExpensesContent({
       currentPath="/pengeluaran"
       cashAccountProvider={data.cashAccount.provider}
       cashAccountHolder={data.cashAccount.custodianName}
+      kostName={preferences.kostName}
       actorName={actor.memberName}
       actorUsername={actor.username}
     >

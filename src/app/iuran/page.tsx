@@ -8,6 +8,7 @@ import {
   PendingPaymentsConfirmationList,
   RecordPaymentForm,
 } from "@/components/contribution-management";
+import { getKostAppPreferences } from "@/lib/app-preferences";
 import {
   formatPeriodLabel,
   getMonthlyContributionsPageData,
@@ -29,13 +30,14 @@ async function MonthlyContributionsContent({
   const actor = await requireAuthenticatedActor();
   const resolvedParams = await searchParams;
 
-  const [data, cashAccount] = await Promise.all([
+  const [data, cashAccount, preferences] = await Promise.all([
     getMonthlyContributionsPageData(prisma, actor, resolvedParams.period),
     prisma.cashAccount.findFirst({
       where: { isActive: true },
       include: { custodianMember: true },
       orderBy: { createdAt: "asc" },
     }),
+    getKostAppPreferences(prisma),
   ]);
 
   const custodianHolder = cashAccount?.custodianMember?.name ?? "Farhan";
@@ -48,6 +50,7 @@ async function MonthlyContributionsContent({
       currentPath="/iuran"
       cashAccountProvider={cashProvider}
       cashAccountHolder={custodianHolder}
+      kostName={preferences.kostName}
       actorName={actor.memberName}
       actorUsername={actor.username}
     >

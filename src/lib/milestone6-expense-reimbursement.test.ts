@@ -28,7 +28,7 @@ import {
   getCashLedgerSummary,
   getTotalConfirmedOperatingExpenses,
 } from "./financial-service";
-import { prisma } from "./prisma";
+import { prisma } from "./test-db";
 
 const M6_TEST_MEMBER_IDS = [
   "77777777-0000-4000-8000-000000000001",

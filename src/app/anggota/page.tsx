@@ -4,6 +4,7 @@ import {
   AddMemberForm,
   MemberListSection,
 } from "@/components/member-management";
+import { getKostAppPreferences } from "@/lib/app-preferences";
 import { listMembersDirectory } from "@/lib/member-service";
 import { APP_NAVIGATION_MODULES } from "@/lib/navigation";
 import { prisma } from "@/lib/prisma";
@@ -11,13 +12,14 @@ import { requireAuthenticatedActor } from "@/lib/session";
 
 async function MembersPageContent() {
   const actor = await requireAuthenticatedActor();
-  const [members, cashAccount] = await Promise.all([
+  const [members, cashAccount, preferences] = await Promise.all([
     listMembersDirectory(prisma, actor),
     prisma.cashAccount.findFirst({
       where: { isActive: true },
       include: { custodianMember: true },
       orderBy: { createdAt: "asc" },
     }),
+    getKostAppPreferences(prisma),
   ]);
 
   const activeMembersCount = members.filter((m) => m.isActiveMember).length;
@@ -31,6 +33,7 @@ async function MembersPageContent() {
       currentPath="/anggota"
       cashAccountProvider={cashProvider}
       cashAccountHolder={custodianHolder}
+      kostName={preferences.kostName}
       actorName={actor.memberName}
       actorUsername={actor.username}
     >

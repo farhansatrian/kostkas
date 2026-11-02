@@ -51,6 +51,11 @@ yarn-error.log*
 # vercel
 .vercel
 
+# Database dumps & backups
+*.dump
+*.sql.gz
+/backups/
+
 # typescript & generated client
 *.tsbuildinfo
 next-env.d.ts

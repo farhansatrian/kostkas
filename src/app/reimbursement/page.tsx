@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { ReimbursementManagement } from "@/components/reimbursement-management";
+import { getKostAppPreferences } from "@/lib/app-preferences";
 import { getReimbursementsPageData } from "@/lib/expense-reimbursement-service";
 import { APP_NAVIGATION_MODULES } from "@/lib/navigation";
 import { prisma } from "@/lib/prisma";
@@ -21,10 +22,13 @@ async function ReimbursementsContent({
 }) {
   const actor = await requireAuthenticatedActor();
   const resolvedParams = await searchParams;
-  const data = await getReimbursementsPageData(prisma, actor, {
-    status: resolvedParams.status,
-    memberId: resolvedParams.memberId,
-  });
+  const [data, preferences] = await Promise.all([
+    getReimbursementsPageData(prisma, actor, {
+      status: resolvedParams.status,
+      memberId: resolvedParams.memberId,
+    }),
+    getKostAppPreferences(prisma),
+  ]);
 
   return (
     <AppShell
@@ -32,6 +36,7 @@ async function ReimbursementsContent({
       currentPath="/reimbursement"
       cashAccountProvider={data.cashAccount.provider}
       cashAccountHolder={data.cashAccount.custodianName}
+      kostName={preferences.kostName}
       actorName={actor.memberName}
       actorUsername={actor.username}
     >

@@ -27,7 +27,7 @@ import {
   listMembersDirectory,
   reactivateMember,
 } from "./member-service";
-import { prisma } from "./prisma";
+import { prisma } from "./test-db";
 
 const M5_TEST_MEMBER_IDS = [
   "88888888-0000-4000-8000-000000000001",

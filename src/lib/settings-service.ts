@@ -336,6 +336,20 @@ export async function authorizedChangeOwnPassword(
       },
     });
 
+    // Keamanan: Revoke seluruh sesi aktif lainnya milik akun ini saat password diubah
+    const now = new Date();
+    await tx.authSession.updateMany({
+      where: {
+        userAccountId: account.id,
+        id: { not: validActor.sessionId },
+        revokedAt: null,
+        expiresAt: { gt: now },
+      },
+      data: {
+        revokedAt: now,
+      },
+    });
+
     await tx.auditLog.create({
       data: {
         actorMemberId: validActor.memberId,
@@ -343,7 +357,7 @@ export async function authorizedChangeOwnPassword(
         action: "CHANGE_PASSWORD",
         entityType: "UserAccount",
         entityId: account.id,
-        summary: `Anggota ${validActor.memberName} (@${validActor.username}) memperbarui password akun secara terverifikasi`,
+        summary: `Anggota ${validActor.memberName} (@${validActor.username}) memperbarui password akun secara terverifikasi dan mencabut seluruh sesi aktif lainnya`,
       },
     });
 
@@ -591,6 +605,16 @@ export interface SettingsPageData {
       period: string;
       actorMemberId: string;
       actionCategory: string;
+      page: number;
+      pageSize: number;
+    };
+    pagination: {
+      page: number;
+      pageSize: number;
+      totalCount: number;
+      totalPages: number;
+      hasPrevPage: boolean;
+      hasNextPage: boolean;
     };
     availablePeriods: Array<{ value: string; label: string }>;
     items: SafeAuditLogItem[];
@@ -607,6 +631,8 @@ export async function getSettingsPageData(
     period?: string;
     actorMemberId?: string;
     actionCategory?: string;
+    page?: number | string;
+    pageSize?: number | string;
   }
 ): Promise<SettingsPageData> {
   const validActor = await verifyActiveActorInDb(db, actor);
@@ -629,10 +655,73 @@ export async function getSettingsPageData(
       ? rawAuditFilters.actionCategory
       : "ALL";
 
+  const requestedPage = Math.max(1, Number(rawAuditFilters?.page) || 1);
+  const pageSize = Math.min(
+    100,
+    Math.max(1, Number(rawAuditFilters?.pageSize) || 50)
+  );
+
   let auditDateRange: { gte: Date; lt: Date } | undefined;
   if (auditPeriod !== "ALL") {
     const { startUtc, endUtc } = getJakartaPeriodBounds(auditPeriod);
     auditDateRange = { gte: startUtc, lt: endUtc };
+  }
+
+  // Bangun klausa filter database untuk audit log
+  const auditWhereClause: Record<string, unknown> = {
+    ...(auditDateRange ? { createdAt: auditDateRange } : {}),
+    ...(auditActorMemberId !== "ALL"
+      ? { actorMemberId: auditActorMemberId }
+      : {}),
+  };
+
+  if (auditActionCategory === "BUDGET") {
+    auditWhereClause.OR = [
+      { entityType: { in: ["MonthlyBudget", "MonthlyBudgetAllocation"] } },
+      { action: { contains: "BUDGET" } },
+    ];
+  } else if (auditActionCategory === "AUTH") {
+    auditWhereClause.OR = [
+      { entityType: { in: ["AuthSession", "UserAccount"] } },
+      { action: { contains: "LOGIN" } },
+      { action: { contains: "LOGOUT" } },
+      { action: { contains: "PASSWORD" } },
+      { action: { contains: "SESSION" } },
+    ];
+  } else if (auditActionCategory === "SETTINGS") {
+    auditWhereClause.OR = [
+      {
+        entityType: {
+          in: ["AppPreference", "ContributionPolicy", "ExpenseCategory", "Member"],
+        },
+      },
+      { action: { contains: "SETTINGS" } },
+      { action: { contains: "PREFERENCES" } },
+      { action: { contains: "POLICY" } },
+      { action: { contains: "MEMBER" } },
+      { action: { contains: "CATEGORY" } },
+    ];
+  } else if (auditActionCategory === "FINANCE") {
+    auditWhereClause.OR = [
+      {
+        entityType: {
+          in: [
+            "Expense",
+            "Payment",
+            "PaymentAllocation",
+            "Reimbursement",
+            "ReimbursementPayout",
+            "CashMovement",
+            "CashAccount",
+          ],
+        },
+      },
+      { action: { contains: "EXPENSE" } },
+      { action: { contains: "PAYMENT" } },
+      { action: { contains: "REIMBURSE" } },
+      { action: { contains: "LEDGER" } },
+      { action: { contains: "ADJUSTMENT" } },
+    ];
   }
 
   const now = new Date();
@@ -644,6 +733,7 @@ export async function getSettingsPageData(
     userAccount,
     activeSessionCount,
     activeMembers,
+    totalAuditCount,
     rawAuditLogs,
   ] = await Promise.all([
     db.appPreference.findUnique({ where: { id: "default" } }),
@@ -671,20 +761,20 @@ export async function getSettingsPageData(
       select: { id: true, name: true },
       orderBy: [{ joinedAt: "asc" }, { name: "asc" }],
     }),
+    db.auditLog.count({ where: auditWhereClause }),
     db.auditLog.findMany({
-      where: {
-        ...(auditDateRange ? { createdAt: auditDateRange } : {}),
-        ...(auditActorMemberId !== "ALL"
-          ? { actorMemberId: auditActorMemberId }
-          : {}),
-      },
+      where: auditWhereClause,
       include: {
         actorMember: { select: { name: true } },
       },
       orderBy: { createdAt: "desc" },
-      take: 80,
+      skip: (requestedPage - 1) * pageSize,
+      take: pageSize,
     }),
   ]);
+
+  const totalPages = Math.max(1, Math.ceil(totalAuditCount / pageSize));
+  const currentPage = Math.min(requestedPage, totalPages);
 
   if (!cashAccount) {
     throw new Error("Akun kas operasional DANA belum tersedia.");
@@ -777,6 +867,16 @@ export async function getSettingsPageData(
         period: auditPeriod,
         actorMemberId: auditActorMemberId,
         actionCategory: auditActionCategory,
+        page: currentPage,
+        pageSize,
+      },
+      pagination: {
+        page: currentPage,
+        pageSize,
+        totalCount: totalAuditCount,
+        totalPages,
+        hasPrevPage: currentPage > 1,
+        hasNextPage: currentPage < totalPages,
       },
       availablePeriods,
       items: mappedAuditItems,

@@ -37,6 +37,7 @@ async function FinancialReportContent({
       currentPath="/laporan"
       cashAccountProvider={data.cashAccount.provider}
       cashAccountHolder={data.cashAccount.custodianName}
+      kostName={data.kostName}
       actorName={actor.memberName}
       actorUsername={actor.username}
     >

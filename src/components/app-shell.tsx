@@ -9,6 +9,7 @@ interface AppShellProps {
   cashAccountHolder: string;
   actorName?: string;
   actorUsername?: string;
+  kostName?: string;
   children: React.ReactNode;
 }
 
@@ -19,6 +20,7 @@ export function AppShell({
   cashAccountHolder,
   actorName,
   actorUsername,
+  kostName = "KostKas",
   children,
 }: AppShellProps) {
   const availableModules = navigationItems.filter((item) => item.implemented);
@@ -40,7 +42,7 @@ export function AppShell({
               className="h-2.5 w-2.5 rounded-xs bg-teal-700 shrink-0"
             />
             <span className="text-base font-semibold tracking-tight">
-              KostKas
+              {kostName || "KostKas"}
             </span>
           </Link>
         </div>
@@ -122,7 +124,7 @@ export function AppShell({
                 className="h-2 w-2 rounded-xs bg-teal-700 shrink-0"
               />
               <span className="text-base font-semibold tracking-tight">
-                KostKas
+                {kostName || "KostKas"}
               </span>
             </Link>
 

@@ -882,6 +882,65 @@ export function SettingsManagement({
             </table>
           </div>
         )}
+
+        {data.auditLogs.pagination && data.auditLogs.pagination.totalPages > 1 && (
+          <div className="p-4 border-t border-slate-200/80 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs">
+            <p className="text-slate-600">
+              Menampilkan{" "}
+              <strong className="font-semibold text-slate-900">
+                {(data.auditLogs.pagination.page - 1) *
+                  data.auditLogs.pagination.pageSize +
+                  1}
+              </strong>
+              –
+              <strong className="font-semibold text-slate-900">
+                {Math.min(
+                  data.auditLogs.pagination.page *
+                    data.auditLogs.pagination.pageSize,
+                  data.auditLogs.pagination.totalCount
+                )}
+              </strong>{" "}
+              dari{" "}
+              <strong className="font-semibold text-slate-900">
+                {data.auditLogs.pagination.totalCount}
+              </strong>{" "}
+              riwayat aktivitas
+            </p>
+
+            <div className="flex items-center gap-2">
+              {data.auditLogs.pagination.hasPrevPage ? (
+                <Link
+                  href={`/pengaturan?period=${data.auditLogs.filters.period}&actorMemberId=${data.auditLogs.filters.actorMemberId}&actionCategory=${data.auditLogs.filters.actionCategory}&page=${data.auditLogs.pagination.page - 1}`}
+                  className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  &larr; Sebelumnya
+                </Link>
+              ) : (
+                <span className="rounded-lg border border-slate-200 bg-slate-100/60 px-2.5 py-1 text-slate-400 cursor-not-allowed">
+                  &larr; Sebelumnya
+                </span>
+              )}
+
+              <span className="text-slate-600 px-1">
+                Halaman {data.auditLogs.pagination.page} dari{" "}
+                {data.auditLogs.pagination.totalPages}
+              </span>
+
+              {data.auditLogs.pagination.hasNextPage ? (
+                <Link
+                  href={`/pengaturan?period=${data.auditLogs.filters.period}&actorMemberId=${data.auditLogs.filters.actorMemberId}&actionCategory=${data.auditLogs.filters.actionCategory}&page=${data.auditLogs.pagination.page + 1}`}
+                  className="rounded-lg border border-slate-300 bg-white px-2.5 py-1 text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  Berikutnya &rarr;
+                </Link>
+              ) : (
+                <span className="rounded-lg border border-slate-200 bg-slate-100/60 px-2.5 py-1 text-slate-400 cursor-not-allowed">
+                  Berikutnya &rarr;
+                </span>
+              )}
+            </div>
+          </div>
+        )}
       </section>
     </div>
   );

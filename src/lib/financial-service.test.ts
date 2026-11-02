@@ -1,6 +1,6 @@
 import "dotenv/config";
 import assert from "node:assert/strict";
-import { prisma } from "./prisma";
+import { prisma } from "./test-db";
 import {
   createAdditionalPeriodCharges,
   generateRegularPeriodCharges,

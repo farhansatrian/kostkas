@@ -12,7 +12,11 @@
     "test:db": "./node_modules/.bin/jiti src/lib/financial-service.test.ts",
     "test:m5": "./node_modules/.bin/jiti src/lib/milestone5-auth-contributions.test.ts",
     "test:m6": "./node_modules/.bin/jiti src/lib/milestone6-expense-reimbursement.test.ts",
-    "test:m7": "./node_modules/.bin/jiti src/lib/milestone7-reporting-budget-settings.test.ts"
+    "test:m7": "./node_modules/.bin/jiti src/lib/milestone7-reporting-budget-settings.test.ts",
+    "test:m8": "./node_modules/.bin/jiti src/lib/milestone8-security-qa.test.ts",
+    "test:all": "npm run test:db && npm run test:m5 && npm run test:m6 && npm run test:m7 && npm run test:m8",
+    "db:backup": "./scripts/db-backup.sh",
+    "db:restore": "./scripts/db-restore.sh"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.1",

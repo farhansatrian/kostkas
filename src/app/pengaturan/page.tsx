@@ -12,6 +12,8 @@ interface SettingsPageProps {
     period?: string;
     actorMemberId?: string;
     actionCategory?: string;
+    page?: string;
+    pageSize?: string;
   }>;
 }
 
@@ -26,6 +28,8 @@ async function SettingsContent({
     period: resolved.period,
     actorMemberId: resolved.actorMemberId,
     actionCategory: resolved.actionCategory,
+    page: resolved.page,
+    pageSize: resolved.pageSize,
   });
 
   return (
@@ -34,6 +38,7 @@ async function SettingsContent({
       currentPath="/pengaturan"
       cashAccountProvider={data.cashAccount.provider}
       cashAccountHolder={data.cashAccount.custodianName}
+      kostName={data.preferences.kostName}
       actorName={actor.memberName}
       actorUsername={actor.username}
     >

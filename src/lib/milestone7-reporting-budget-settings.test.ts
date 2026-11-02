@@ -22,7 +22,7 @@ import {
   recordContributionPayment,
   upsertContributionPolicy,
 } from "./financial-service";
-import { prisma } from "./prisma";
+import { prisma } from "./test-db";
 import {
   exportFinancialReportCsv,
   getFinancialReportData,

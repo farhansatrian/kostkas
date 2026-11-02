@@ -51,6 +51,7 @@ export async function getLiveDashboardData(
     periodCharges,
     outstandingReimbursements,
     confirmedPeriodExpensesAgg,
+    appPref,
   ] = await Promise.all([
     db.cashAccount.findFirst({
       where: { isActive: true },
@@ -95,6 +96,9 @@ export async function getLiveDashboardData(
       _sum: {
         amount: true,
       },
+    }),
+    db.appPreference.findUnique({
+      where: { id: "default" },
     }),
   ]);
 
@@ -283,6 +287,8 @@ export async function getLiveDashboardData(
     asOfDateLabel: formatShortDateId(now),
     hasGeneratedPeriodCharges: periodCharges.length > 0,
     config: {
+      kostName: appPref?.kostName ?? "KostKas",
+      dateFormat: appPref?.dateFormat ?? "dd MMM yyyy",
       activeMemberCount: activeMembers.length,
       monthlyDuePerMember: defaultDuePerMember,
       cashAccountProvider: cashAccount?.provider ?? "DANA",

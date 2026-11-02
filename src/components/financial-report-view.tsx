@@ -51,33 +51,51 @@ export function FinancialReportView({ data }: { data: FinancialReportData }) {
           >
             Filter Periode Laporan ({data.timezone})
           </h2>
-          <form
-            method="GET"
-            action="/laporan"
-            className="flex flex-wrap items-center gap-2.5"
-          >
-            <label htmlFor="report-period-select" className="sr-only">
-              Pilih Periode Bulan dan Tahun
-            </label>
-            <select
-              id="report-period-select"
-              name="period"
-              defaultValue={data.period}
-              className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-900 focus:border-teal-700 focus:outline-none"
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href={`/laporan?period=${data.prevPeriod}`}
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+              title="Bulan Sebelumnya"
             >
-              {data.availablePeriods.map((p) => (
-                <option key={p.value} value={p.value}>
-                  {p.label} ({p.value})
-                </option>
-              ))}
-            </select>
-            <button
-              type="submit"
-              className="rounded-lg bg-slate-900 px-3.5 py-1.5 text-xs font-medium text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              <span aria-hidden="true">&larr;</span> Bulan Lalu
+            </Link>
+
+            <form
+              method="GET"
+              action="/laporan"
+              className="flex flex-wrap items-center gap-2"
             >
-              Tampilkan Periode
-            </button>
-          </form>
+              <label htmlFor="report-period-select" className="sr-only">
+                Pilih Periode Bulan dan Tahun
+              </label>
+              <select
+                id="report-period-select"
+                name="period"
+                defaultValue={data.period}
+                className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-900 focus:border-teal-700 focus:outline-none"
+              >
+                {data.availablePeriods.map((p) => (
+                  <option key={p.value} value={p.value}>
+                    {p.label} ({p.value})
+                  </option>
+                ))}
+              </select>
+              <button
+                type="submit"
+                className="rounded-lg bg-slate-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                Pilih
+              </button>
+            </form>
+
+            <Link
+              href={`/laporan?period=${data.nextPeriod}`}
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors"
+              title="Bulan Berikutnya"
+            >
+              Bulan Depan <span aria-hidden="true">&rarr;</span>
+            </Link>
+          </div>
         </div>
 
         <div className="space-y-1.5">

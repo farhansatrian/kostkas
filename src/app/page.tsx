@@ -32,6 +32,7 @@ async function DashboardContent() {
       currentPath="/"
       cashAccountProvider={config.cashAccountProvider}
       cashAccountHolder={config.cashAccountHolder}
+      kostName={config.kostName}
       actorName={actor.memberName}
       actorUsername={actor.username}
     >

@@ -12,6 +12,11 @@ export const SESSION_COOKIE_NAME = "kostkas_session";
 const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000; // 7 hari
 const BCRYPT_SALT_ROUNDS = 12;
 
+export const MAX_FAILED_LOGIN_ATTEMPTS = 5;
+export const LOGIN_LOCKOUT_WINDOW_MS = 15 * 60 * 1000; // 15 menit
+const DUMMY_BCRYPT_HASH =
+  "$2a$12$K.z2a35gQ7O4lC74dK43t.N0hF0qW0x4sE0fJ3v7m9y2l1k8u4p2e";
+
 export class UnauthorizedError extends Error {
   constructor(message = "Akses ditolak: sesi autentikasi tidak valid atau sudah berakhir.") {
     super(message);
@@ -229,17 +234,62 @@ export async function authenticateMemberCredentials(
 
   const { username, password } = parsed.data;
 
+  // Proteksi Brute-Force: Cek jumlah kegagalan login dalam jendela waktu 15 menit
+  const windowStart = new Date(Date.now() - LOGIN_LOCKOUT_WINDOW_MS);
+  const recentFailedCount = await db.auditLog.count({
+    where: {
+      action: "LOGIN_FAILED",
+      entityId: username,
+      createdAt: { gte: windowStart },
+    },
+  });
+
+  if (recentFailedCount >= MAX_FAILED_LOGIN_ATTEMPTS) {
+    throw new UnauthorizedError(
+      "Terlalu banyak percobaan login yang gagal. Akun dibatasi sementara selama 15 menit demi keamanan."
+    );
+  }
+
   const account = await db.userAccount.findUnique({
     where: { username },
     include: { member: true },
   });
 
   if (!account) {
+    // Mitigasi Timing Attack: jalankan verifikasi password dummy agar durasi respons identik
+    await verifyPassword(password, DUMMY_BCRYPT_HASH);
+    try {
+      await db.auditLog.create({
+        data: {
+          actorName: `User @${username}`,
+          action: "LOGIN_FAILED",
+          entityType: "UserAccount",
+          entityId: username,
+          summary: `Percobaan login gagal untuk @${username} (Akun tidak terdaftar)`,
+        },
+      });
+    } catch {
+      // Abaikan kegagalan pencatatan audit
+    }
     throw new UnauthorizedError("Username atau password tidak sesuai.");
   }
 
   const isPasswordValid = await verifyPassword(password, account.passwordHash);
   if (!isPasswordValid) {
+    try {
+      await db.auditLog.create({
+        data: {
+          actorMemberId: account.member.id,
+          actorName: account.member.name,
+          action: "LOGIN_FAILED",
+          entityType: "UserAccount",
+          entityId: username,
+          summary: `Percobaan login gagal untuk @${username} (Password tidak sesuai)`,
+        },
+      });
+    } catch {
+      // Abaikan kegagalan pencatatan audit
+    }
     throw new UnauthorizedError("Username atau password tidak sesuai.");
   }
 

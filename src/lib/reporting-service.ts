@@ -166,6 +166,9 @@ export interface FinancialReportData {
   selectedYear: number;
   selectedMonth: number;
   timezone: string;
+  kostName: string;
+  prevPeriod: string;
+  nextPeriod: string;
   availablePeriods: Array<{ value: string; label: string }>;
   cashAccount: {
     id: string;
@@ -566,19 +569,36 @@ export async function getFinancialReportData(
     0
   );
 
-  const currentPeriod = getCurrentYearMonthPeriod();
-  const periodSet = new Set<string>([
-    shiftYearMonthPeriod(currentPeriod, -2),
-    shiftYearMonthPeriod(currentPeriod, -1),
-    currentPeriod,
-    shiftYearMonthPeriod(currentPeriod, 1),
-    targetPeriod,
+  const [appPref, recordedCharges] = await Promise.all([
+    db.appPreference.findUnique({ where: { id: "default" } }).catch(() => null),
+    db.contributionCharge
+      .findMany({
+        select: { period: true },
+        distinct: ["period"],
+      })
+      .catch(() => []),
   ]);
+
+  const currentPeriod = getCurrentYearMonthPeriod();
+  const periodSet = new Set<string>();
+
+  // Rentang 24 bulan ke belakang dan 12 bulan ke depan
+  for (let offset = -24; offset <= 12; offset++) {
+    periodSet.add(shiftYearMonthPeriod(currentPeriod, offset));
+  }
+  periodSet.add(targetPeriod);
+
+  for (const c of recordedCharges) {
+    if (c.period) periodSet.add(c.period);
+  }
 
   const availablePeriods = Array.from(periodSet)
     .sort()
     .reverse()
     .map((p) => ({ value: p, label: formatPeriodLabel(p) }));
+
+  const prevPeriod = shiftYearMonthPeriod(targetPeriod, -1);
+  const nextPeriod = shiftYearMonthPeriod(targetPeriod, 1);
 
   return {
     period: targetPeriod,
@@ -586,6 +606,9 @@ export async function getFinancialReportData(
     selectedYear: Number(yearStr),
     selectedMonth: Number(monthStr),
     timezone: JAKARTA_TIMEZONE,
+    kostName: appPref?.kostName ?? "KostKas",
+    prevPeriod,
+    nextPeriod,
     availablePeriods,
     cashAccount: {
       id: cashAccount.id,

@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { BudgetManagement } from "@/components/budget-management";
+import { getKostAppPreferences } from "@/lib/app-preferences";
 import { getBudgetPageData } from "@/lib/budget-service";
 import { APP_NAVIGATION_MODULES } from "@/lib/navigation";
 import { prisma } from "@/lib/prisma";
@@ -20,7 +21,10 @@ async function BudgetContent({
 }) {
   const actor = await requireAuthenticatedActor();
   const resolved = await searchParams;
-  const data = await getBudgetPageData(prisma, actor, resolved.period);
+  const [data, preferences] = await Promise.all([
+    getBudgetPageData(prisma, actor, resolved.period),
+    getKostAppPreferences(prisma),
+  ]);
 
   return (
     <AppShell
@@ -28,6 +32,7 @@ async function BudgetContent({
       currentPath="/anggaran"
       cashAccountProvider={data.cashAccount.provider}
       cashAccountHolder={data.cashAccount.custodianName}
+      kostName={preferences.kostName}
       actorName={actor.memberName}
       actorUsername={actor.username}
     >
