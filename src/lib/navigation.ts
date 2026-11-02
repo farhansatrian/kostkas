@@ -69,19 +69,19 @@ export const APP_NAVIGATION_MODULES: NavigationModuleItem[] = [
     id: "budgets",
     label: "Anggaran",
     href: "/anggaran",
-    implemented: false,
+    implemented: true,
   },
   {
     id: "reports",
     label: "Laporan",
     href: "/laporan",
-    implemented: false,
+    implemented: true,
   },
   {
     id: "settings",
     label: "Pengaturan",
     href: "/pengaturan",
-    implemented: false,
+    implemented: true,
   },
 ];
 

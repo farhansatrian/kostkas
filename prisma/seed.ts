@@ -190,6 +190,19 @@ async function main(): Promise<void> {
     });
   }
 
+  // 6. Upsert Preferensi Aplikasi Default
+  await prisma.appPreference.upsert({
+    where: { id: "default" },
+    update: {},
+    create: {
+      id: "default",
+      kostName: "KostKas Bersama",
+      currencyCode: "IDR",
+      timezone: "Asia/Jakarta",
+      dateFormat: "dd MMM yyyy",
+    },
+  });
+
   const memberCount = await prisma.member.count();
   const accountCount = await prisma.userAccount.count();
   const categoryCount = await prisma.expenseCategory.count();

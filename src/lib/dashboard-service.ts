@@ -10,6 +10,7 @@ import {
   getEffectiveContributionPolicy,
 } from "./financial-service";
 import { APP_NAVIGATION_MODULES, formatShortDateId } from "./navigation";
+import { getJakartaPeriodBounds } from "./reporting-service";
 
 export interface LiveMemberDueItem {
   id: string;
@@ -40,13 +41,8 @@ export async function getLiveDashboardData(
   assertAuthenticatedActor(actor);
 
   const currentPeriod = getCurrentYearMonthPeriod(now);
-  const [yearStr, monthStr] = currentPeriod.split("-");
-  const periodStart = new Date(
-    Date.UTC(Number(yearStr), Number(monthStr) - 1, 1, 0, 0, 0)
-  );
-  const nextPeriodStart = new Date(
-    Date.UTC(Number(yearStr), Number(monthStr), 1, 0, 0, 0)
-  );
+  const { startUtc: periodStart, endUtc: nextPeriodStart } =
+    getJakartaPeriodBounds(currentPeriod);
 
   const [
     cashAccount,

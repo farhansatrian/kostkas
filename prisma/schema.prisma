@@ -72,6 +72,7 @@ model Member {
   advancedExpenses    Expense[]            @relation("ExpenseAdvancer")
   reimbursements      Reimbursement[]      @relation("ReimbursementBeneficiary")
   actorCashMovements  CashMovement[]       @relation("CashMovementActor")
+  updatedBudgets      MonthlyBudget[]      @relation("BudgetUpdater")
   auditLogs           AuditLog[]           @relation("AuditLogActor")
 
   @@index([leftAt])
@@ -214,9 +215,10 @@ model ExpenseCategory {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  parent   ExpenseCategory?  @relation("ExpenseCategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
-  children ExpenseCategory[] @relation("ExpenseCategoryHierarchy")
-  expenses Expense[]
+  parent            ExpenseCategory?          @relation("ExpenseCategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children          ExpenseCategory[]         @relation("ExpenseCategoryHierarchy")
+  expenses          Expense[]
+  budgetAllocations MonthlyBudgetAllocation[]
 }
 
 /// Pengeluaran operasional kost (dibayar langsung dari kas atau ditalangi anggota).
@@ -325,4 +327,48 @@ model AuditLog {
 
   @@index([entityType, entityId])
   @@index([createdAt])
+}
+
+/// Perencanaan anggaran bulanan kost per periode (YYYY-MM).
+/// Perubahan anggaran pada periode baru tidak mengubah histori anggaran periode sebelumnya.
+model MonthlyBudget {
+  id          String   @id @default(uuid()) @db.Uuid
+  period      String   @unique
+  totalAmount Int
+  note        String?
+  updatedById String?  @db.Uuid
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  updatedBy   Member?                   @relation("BudgetUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  allocations MonthlyBudgetAllocation[]
+
+  @@index([period])
+}
+
+/// Alokasi anggaran bulanan per kategori atau subkategori pengeluaran.
+model MonthlyBudgetAllocation {
+  id              String   @id @default(uuid()) @db.Uuid
+  monthlyBudgetId String   @db.Uuid
+  categoryId      String   @db.Uuid
+  amount          Int
+  note            String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  monthlyBudget MonthlyBudget   @relation(fields: [monthlyBudgetId], references: [id], onDelete: Cascade)
+  category      ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@unique([monthlyBudgetId, categoryId])
+  @@index([categoryId])
+}
+
+/// Preferensi dan konfigurasi umum aplikasi KostKas.
+model AppPreference {
+  id           String   @id @default("default")
+  kostName     String   @default("KostKas Bersama")
+  currencyCode String   @default("IDR")
+  timezone     String   @default("Asia/Jakarta")
+  dateFormat   String   @default("dd MMM yyyy")
+  updatedAt    DateTime @updatedAt
 }

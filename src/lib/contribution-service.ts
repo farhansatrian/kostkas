@@ -77,9 +77,18 @@ export const ConfirmPendingPaymentInputSchema = z.object({
   targetChargeId: z.string().uuid("Pilih tagihan tujuan alokasi yang valid."),
 });
 
+/**
+ * Mengambil periode berjalan (YYYY-MM) berdasarkan zona waktu Asia/Jakarta,
+ * tidak bergantung pada zona waktu server (VM dapat berjalan dalam UTC).
+ */
 export function getCurrentYearMonthPeriod(now: Date = new Date()): string {
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(now);
+  const year = parts.find((p) => p.type === "year")?.value ?? "1970";
+  const month = parts.find((p) => p.type === "month")?.value ?? "01";
   return `${year}-${month}`;
 }
 

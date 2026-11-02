@@ -28,6 +28,7 @@ import {
   reverseOrVoidExpense,
   settleReimbursementPayout,
 } from "./financial-service";
+import { getJakartaPeriodBounds } from "./reporting-service";
 
 export const CreateExpenseInputSchema = z
   .object({
@@ -557,9 +558,7 @@ export async function getExpensesPageData(
 
   let dateRangeFilter: { gte: Date; lt: Date } | undefined;
   if (period !== "ALL") {
-    const [yearStr, monthStr] = period.split("-");
-    const startUtc = new Date(Date.UTC(Number(yearStr), Number(monthStr) - 1, 1, 0, 0, 0));
-    const endUtc = new Date(Date.UTC(Number(yearStr), Number(monthStr), 1, 0, 0, 0));
+    const { startUtc, endUtc } = getJakartaPeriodBounds(period);
     dateRangeFilter = { gte: startUtc, lt: endUtc };
   }
 
