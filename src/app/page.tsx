@@ -1,34 +1,42 @@
+import { Suspense } from "react";
+import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
-import { DEMO_DASHBOARD_DATA, formatRupiah } from "@/data/demo-dashboard";
+import { getLiveDashboardData } from "@/lib/dashboard-service";
+import { formatRupiah } from "@/lib/navigation";
+import { prisma } from "@/lib/prisma";
+import { requireAuthenticatedActor } from "@/lib/session";
 
-export default function HomePage() {
-  const data = DEMO_DASHBOARD_DATA;
+async function DashboardContent() {
+  const actor = await requireAuthenticatedActor();
+  const data = await getLiveDashboardData(prisma, actor);
   const { config, cashSummary } = data;
 
-  const paidMembersCount = data.memberDues.filter(
-    (member) => member.status === "LUNAS"
-  ).length;
+  const duesProgressPercent =
+    cashSummary.monthlyTargetDues > 0
+      ? Math.min(
+          100,
+          Math.round(
+            (cashSummary.collectedDuesThisMonth /
+              cashSummary.monthlyTargetDues) *
+              100
+          )
+        )
+      : 0;
 
-  const duesProgressPercent = Math.min(
-    100,
-    Math.round(
-      (cashSummary.collectedDuesThisMonth / cashSummary.monthlyTargetDues) * 100
-    )
-  );
-
-  const latestTransactions = data.recentTransactions.slice(0, 5);
-  const pendingReimbursement = data.reimbursements.find(
-    (item) => item.status === "TERUTANG"
-  );
+  const netCashFlowThisMonth =
+    cashSummary.collectedDuesThisMonth - cashSummary.totalCashOutflowThisMonth;
 
   return (
     <AppShell
       navigationItems={data.navigationModules}
+      currentPath="/"
       cashAccountProvider={config.cashAccountProvider}
       cashAccountHolder={config.cashAccountHolder}
+      actorName={actor.memberName}
+      actorUsername={actor.username}
     >
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-10 py-6 sm:py-10 space-y-8 sm:space-y-10">
-        {/* Page Header + Satu-satunya Penanda DEMO */}
+        {/* Page Header */}
         <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-2">
           <div>
             <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-slate-900">
@@ -39,15 +47,12 @@ export default function HomePage() {
             </p>
           </div>
 
-          {data.isDemo && (
-            <div className="inline-flex items-center gap-2 self-start sm:self-auto rounded-md bg-amber-50/90 border border-amber-200/80 px-2.5 py-1 text-xs font-medium text-amber-900">
-              <span
-                aria-hidden="true"
-                className="h-1.5 w-1.5 rounded-full bg-amber-600"
-              />
-              <span>Data simulasi (DEMO)</span>
-            </div>
-          )}
+          <Link
+            href="/iuran"
+            className="inline-flex items-center self-start sm:self-auto rounded-lg border border-slate-200/80 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"
+          >
+            Kelola iuran & pembayaran
+          </Link>
         </div>
 
         {/* Executive Ledger Surface: 1. Saldo Kas Utama + 2. Iuran Diterima + 3. Kas Keluar + 4. Reimbursement Terutang */}
@@ -73,19 +78,22 @@ export default function HomePage() {
 
             <div className="text-xs text-slate-500 sm:text-right tabular-nums space-y-0.5">
               <p>
-                Saldo awal bulan lalu:{" "}
+                Saldo awal / periode lalu:{" "}
                 <span className="font-medium text-slate-700">
                   {formatRupiah(cashSummary.previousMonthCarryOver)}
                 </span>
               </p>
               <p>
                 Selisih kas bulan ini:{" "}
-                <span className="font-medium text-emerald-700">
-                  +
-                  {formatRupiah(
-                    cashSummary.collectedDuesThisMonth -
-                      cashSummary.totalCashOutflowThisMonth
-                  )}
+                <span
+                  className={`font-medium ${
+                    netCashFlowThisMonth >= 0
+                      ? "text-emerald-700"
+                      : "text-slate-900"
+                  }`}
+                >
+                  {netCashFlowThisMonth >= 0 ? "+" : "-"}
+                  {formatRupiah(Math.abs(netCashFlowThisMonth))}
                 </span>
               </p>
             </div>
@@ -123,7 +131,7 @@ export default function HomePage() {
                     Target {formatRupiah(cashSummary.monthlyTargetDues)}
                   </span>
                   <span className="font-medium text-slate-700">
-                    {paidMembersCount}/{config.activeMemberCount} lunas
+                    {data.paidMembersCount}/{config.activeMemberCount} lunas
                   </span>
                 </div>
               </div>
@@ -176,12 +184,12 @@ export default function HomePage() {
                     {cashSummary.pendingReimbursementCount} klaim
                   </span>
                 </div>
-                {pendingReimbursement && (
+                {data.latestPendingReimbursement && (
                   <div className="flex items-center justify-between">
                     <span>Penalang</span>
                     <span className="font-medium text-slate-700">
-                      {pendingReimbursement.requester} (
-                      {pendingReimbursement.dateLabel})
+                      {data.latestPendingReimbursement.requester} (
+                      {data.latestPendingReimbursement.dateLabel})
                     </span>
                   </div>
                 )}
@@ -212,6 +220,8 @@ export default function HomePage() {
             <ul className="divide-y divide-slate-200/70">
               {data.memberDues.map((member) => {
                 const isPaid = member.status === "LUNAS";
+                const isPartial = member.status === "CICILAN";
+
                 return (
                   <li
                     key={member.id}
@@ -221,30 +231,36 @@ export default function HomePage() {
                       <p className="text-sm font-medium text-slate-900 truncate">
                         {member.name}
                       </p>
-                      <p className="text-xs text-slate-500 mt-0.5 tabular-nums">
-                        {member.paidDateLabel}
+                      <p className="text-xs text-slate-500 mt-0.5 tabular-nums truncate">
+                        {member.detailLabel}
                       </p>
                     </div>
 
                     <div className="text-right shrink-0">
                       <p className="text-sm font-medium text-slate-900 tabular-nums">
-                        {formatRupiah(member.monthlyDueAmount)}
+                        {formatRupiah(member.billedAmount)}
                       </p>
                       <div className="mt-0.5 inline-flex items-center justify-end gap-1.5 text-xs">
                         <span
                           aria-hidden="true"
                           className={`h-1.5 w-1.5 rounded-full ${
-                            isPaid ? "bg-teal-700" : "bg-amber-600"
+                            isPaid
+                              ? "bg-teal-700"
+                              : isPartial
+                                ? "bg-amber-600"
+                                : "bg-slate-400"
                           }`}
                         />
                         <span
                           className={
                             isPaid
                               ? "text-teal-800 font-medium"
-                              : "text-amber-800 font-medium"
+                              : isPartial
+                                ? "text-amber-800 font-medium"
+                                : "text-slate-600 font-medium"
                           }
                         >
-                          {isPaid ? "Lunas" : "Menunggu"}
+                          {member.statusLabel}
                         </span>
                       </div>
                     </div>
@@ -267,43 +283,71 @@ export default function HomePage() {
                 Transaksi terbaru
               </h2>
               <span className="text-xs text-slate-500 tabular-nums">
-                {latestTransactions.length} mutasi terakhir
+                {data.recentTransactions.length} mutasi terakhir
               </span>
             </div>
 
-            <ul className="divide-y divide-slate-200/70">
-              {latestTransactions.map((trx) => {
-                const isInflow = trx.flow === "IN";
-                return (
-                  <li
-                    key={trx.id}
-                    className="py-3.5 flex items-center justify-between gap-4"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-slate-900 truncate">
-                        {trx.title}
-                      </p>
-                      <p className="text-xs text-slate-500 mt-0.5 truncate tabular-nums">
-                        {trx.dateLabel}, {trx.typeLabel.toLowerCase()} (
-                        {trx.memberName})
-                      </p>
-                    </div>
-
-                    <p
-                      className={`text-sm font-semibold tabular-nums shrink-0 ${
-                        isInflow ? "text-emerald-700" : "text-slate-900"
-                      }`}
+            {data.recentTransactions.length === 0 ? (
+              <div className="py-6 text-xs text-slate-500">
+                Belum ada mutasi kas terkonfirmasi di buku besar PostgreSQL.
+                Catat pembayaran iuran melalui halaman{" "}
+                <Link
+                  href="/iuran"
+                  className="font-medium text-teal-800 underline underline-offset-2"
+                >
+                  Iuran Bulanan
+                </Link>
+                .
+              </div>
+            ) : (
+              <ul className="divide-y divide-slate-200/70">
+                {data.recentTransactions.map((trx) => {
+                  const isInflow = trx.flow === "IN";
+                  return (
+                    <li
+                      key={trx.id}
+                      className="py-3.5 flex items-center justify-between gap-4"
                     >
-                      {isInflow ? "+" : "-"}
-                      {formatRupiah(trx.amount)}
-                    </p>
-                  </li>
-                );
-              })}
-            </ul>
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-slate-900 truncate">
+                          {trx.title}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-0.5 truncate tabular-nums">
+                          {trx.dateLabel}, {trx.categoryLabel.toLowerCase()} (
+                          {trx.actorName})
+                        </p>
+                      </div>
+
+                      <p
+                        className={`text-sm font-semibold tabular-nums shrink-0 ${
+                          isInflow ? "text-emerald-700" : "text-slate-900"
+                        }`}
+                      >
+                        {isInflow ? "+" : "-"}
+                        {formatRupiah(trx.amount)}
+                      </p>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </section>
         </div>
       </div>
     </AppShell>
+  );
+}
+
+export default function HomePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-[#F8FAFA] p-6 text-xs text-slate-500">
+          Memuat buku besar kas...
+        </div>
+      }
+    >
+      <DashboardContent />
+    </Suspense>
   );
 }

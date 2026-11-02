@@ -64,6 +64,7 @@ model Member {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
+  userAccount         UserAccount?
   custodianAccounts   CashAccount[]        @relation("CashAccountCustodian")
   contributionCharges ContributionCharge[]
   payments            Payment[]            @relation("MemberPayments")
@@ -74,6 +75,35 @@ model Member {
   auditLogs           AuditLog[]           @relation("AuditLogActor")
 
   @@index([leftAt])
+}
+
+/// Akun autentikasi yang terhubung 1:1 dengan entitas Member.
+/// Seluruh anggota aktif memiliki hak akses aplikasi yang setara (tanpa pembedaan role).
+model UserAccount {
+  id           String    @id @default(uuid()) @db.Uuid
+  memberId     String    @unique @db.Uuid
+  username     String    @unique
+  passwordHash String
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  member   Member        @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  sessions AuthSession[]
+}
+
+/// Sesi autentikasi tersimpan di database untuk mendukung validasi & revokasi server-side.
+model AuthSession {
+  id            String    @id @default(uuid()) @db.Uuid
+  userAccountId String    @db.Uuid
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  createdAt     DateTime  @default(now())
+
+  userAccount UserAccount @relation(fields: [userAccountId], references: [id], onDelete: Cascade)
+
+  @@index([userAccountId, expiresAt])
 }
 
 /// Akun penyimpanan kas bersama (contoh: akun DANA khusus kas kost).

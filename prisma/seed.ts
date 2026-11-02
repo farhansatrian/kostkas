@@ -1,20 +1,24 @@
 import "dotenv/config";
 import { prisma } from "../src/lib/prisma";
+import { upsertMemberAccountCredentials } from "../src/lib/auth";
 
 const SEED_MEMBERS = [
   {
     id: "00000000-0000-4000-8000-000000000001",
     name: "Farhan",
+    username: "farhan",
     joinedAt: new Date("2026-10-01T00:00:00.000Z"),
   },
   {
     id: "00000000-0000-4000-8000-000000000002",
     name: "Nabeel",
+    username: "nabeel",
     joinedAt: new Date("2026-10-01T00:00:00.000Z"),
   },
   {
     id: "00000000-0000-4000-8000-000000000003",
     name: "Alzha",
+    username: "alzha",
     joinedAt: new Date("2026-10-01T00:00:00.000Z"),
   },
 ] as const;
@@ -56,6 +60,7 @@ async function main(): Promise<void> {
   console.log("[Seed] Memulai proses seed development KostKas (idempotent)...");
 
   // 1. Upsert 3 anggota awal contoh (Farhan, Nabeel, Alzha)
+  const devInitialPassword = process.env.KOSTKAS_DEV_INITIAL_PASSWORD?.trim();
   for (const member of SEED_MEMBERS) {
     await prisma.member.upsert({
       where: { id: member.id },
@@ -71,6 +76,15 @@ async function main(): Promise<void> {
         leftAt: null,
       },
     });
+
+    if (devInitialPassword && devInitialPassword.length >= 8) {
+      await upsertMemberAccountCredentials(prisma, {
+        memberId: member.id,
+        username: member.username,
+        plainPassword: devInitialPassword,
+        actorMemberId: SEED_MEMBERS[0].id,
+      });
+    }
   }
 
   const farhanId = SEED_MEMBERS[0].id;
@@ -153,10 +167,12 @@ async function main(): Promise<void> {
   }
 
   const memberCount = await prisma.member.count();
+  const accountCount = await prisma.userAccount.count();
   const categoryCount = await prisma.expenseCategory.count();
 
   console.log("[Seed] Selesai tanpa duplikasi:");
   console.log(`  - Anggota terdaftar       : ${memberCount} orang`);
+  console.log(`  - Akun login terhubung    : ${accountCount} akun`);
   console.log(`  - Akun kas utama          : ${cashAccount.code} (${cashAccount.name})`);
   console.log(
     `  - Kebijakan iuran aktif   : ${initialPolicy.code} (Rp${initialPolicy.amountPerMember.toLocaleString("id-ID")}/bulan)`

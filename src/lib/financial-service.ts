@@ -592,6 +592,176 @@ export async function recordContributionPayment(
 }
 
 /**
+ * Mengonfirmasi pembayaran iuran yang sebelumnya berstatus PENDING secara atomic:
+ * - Mengalokasikan nominal pembayaran ke tagihan tujuan (`PaymentAllocation`)
+ * - Memperbarui status dan `allocatedAmount` pada `ContributionCharge` (`PARTIALLY_PAID` / `PAID`)
+ * - Mengubah status `Payment` menjadi `CONFIRMED`
+ * - Mencatat arus kas masuk (`CashMovement` IN `CONTRIBUTION_PAYMENT`)
+ * - Mencatat jejak audit (`AuditLog`)
+ * Bersifat idempotent: jika pembayaran sudah CONFIRMED sebelumnya, tidak menduplikasi alokasi atau mutasi kas.
+ */
+export async function confirmPendingContributionPayment(
+  db: PrismaClient,
+  input: {
+    paymentId: string;
+    targetChargeIds: string[];
+    actorMemberId?: string;
+    confirmedAt?: Date;
+  }
+): Promise<PaymentProcessResult> {
+  return db.$transaction(async (tx) => {
+    const existingPayment = await tx.payment.findUnique({
+      where: { id: input.paymentId },
+      include: {
+        allocations: true,
+        cashMovement: true,
+      },
+    });
+
+    if (!existingPayment) {
+      throw new Error("Data pembayaran yang akan dikonfirmasi tidak ditemukan.");
+    }
+
+    if (existingPayment.status === "CONFIRMED") {
+      const chargeIds = existingPayment.allocations.map((a) => a.chargeId);
+      const charges = await tx.contributionCharge.findMany({
+        where: { id: { in: chargeIds } },
+      });
+
+      return {
+        payment: existingPayment,
+        wasDuplicateRequest: true,
+        allocations: existingPayment.allocations.map((a) => ({
+          chargeId: a.chargeId,
+          amount: a.amount,
+        })),
+        updatedCharges: charges.map((c) => ({
+          chargeId: c.id,
+          totalAmount: c.amount,
+          allocatedAmount: c.allocatedAmount,
+          remainingAmount: c.amount - c.allocatedAmount,
+          status: c.status,
+        })),
+        cashMovement: existingPayment.cashMovement,
+      };
+    }
+
+    if (existingPayment.status === "REJECTED") {
+      throw new Error("Pembayaran yang sudah ditolak tidak dapat dikonfirmasi.");
+    }
+
+    const charges = await tx.contributionCharge.findMany({
+      where: {
+        id: { in: input.targetChargeIds },
+        memberId: existingPayment.memberId,
+        status: { not: "CANCELLED" },
+      },
+      orderBy: [{ period: "asc" }, { kind: "asc" }, { sequence: "asc" }],
+    });
+
+    if (charges.length === 0) {
+      throw new Error("Tagihan tujuan alokasi pembayaran tidak ditemukan.");
+    }
+
+    let unallocated = existingPayment.amount;
+    const allocations: Array<{ chargeId: string; amount: number }> = [];
+    const updatedCharges: ChargeBalanceSnapshot[] = [];
+
+    for (const charge of charges) {
+      if (unallocated <= 0) break;
+      const currentRemaining = charge.amount - charge.allocatedAmount;
+      if (currentRemaining <= 0) continue;
+
+      const allocationAmount = Math.min(unallocated, currentRemaining);
+      unallocated -= allocationAmount;
+
+      await tx.paymentAllocation.create({
+        data: {
+          paymentId: existingPayment.id,
+          chargeId: charge.id,
+          amount: allocationAmount,
+        },
+      });
+
+      const newAllocated = charge.allocatedAmount + allocationAmount;
+      const newRemaining = charge.amount - newAllocated;
+      const newStatus: ContributionCharge["status"] =
+        newRemaining === 0 ? "PAID" : "PARTIALLY_PAID";
+
+      const updatedCharge = await tx.contributionCharge.update({
+        where: { id: charge.id },
+        data: {
+          allocatedAmount: newAllocated,
+          status: newStatus,
+        },
+      });
+
+      allocations.push({
+        chargeId: updatedCharge.id,
+        amount: allocationAmount,
+      });
+
+      updatedCharges.push({
+        chargeId: updatedCharge.id,
+        totalAmount: updatedCharge.amount,
+        allocatedAmount: updatedCharge.allocatedAmount,
+        remainingAmount: updatedCharge.amount - updatedCharge.allocatedAmount,
+        status: updatedCharge.status,
+      });
+    }
+
+    if (unallocated > 0) {
+      throw new Error(
+        `Nominal pembayaran melebihi sisa tagihan sebesar Rp${unallocated}.`
+      );
+    }
+
+    const now = input.confirmedAt ?? new Date();
+
+    const updatedPayment = await tx.payment.update({
+      where: { id: existingPayment.id },
+      data: {
+        status: "CONFIRMED",
+        confirmedAt: now,
+      },
+    });
+
+    const cashMovement = await tx.cashMovement.create({
+      data: {
+        cashAccountId: existingPayment.cashAccountId,
+        direction: "IN",
+        category: "CONTRIBUTION_PAYMENT",
+        amount: existingPayment.amount,
+        status: "CONFIRMED",
+        occurredAt: now,
+        description: existingPayment.note ?? "Konfirmasi pembayaran iuran anggota",
+        actorMemberId: input.actorMemberId ?? existingPayment.memberId,
+        paymentId: existingPayment.id,
+        idempotencyKey: `CM:PAYMENT:${existingPayment.idempotencyKey}`,
+      },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        actorMemberId: input.actorMemberId ?? existingPayment.memberId,
+        action: "CONFIRM_PENDING_PAYMENT",
+        entityType: "Payment",
+        entityId: existingPayment.id,
+        summary: `Konfirmasi pembayaran PENDING Rp${existingPayment.amount} ke ${allocations.length} tagihan`,
+      },
+    });
+
+    return {
+      payment: updatedPayment,
+      wasDuplicateRequest: false,
+      allocations,
+      updatedCharges,
+      cashMovement,
+    };
+  });
+}
+
+/**
  * Mencatat pengeluaran operasional yang dibayar langsung dari akun kas DANA.
  * Mengurangi saldo kas hanya setelah berstatus CONFIRMED.
  */
