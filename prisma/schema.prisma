@@ -1,0 +1,298 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ContributionChargeKind {
+  REGULAR
+  ADDITIONAL
+}
+
+enum ContributionChargeStatus {
+  UNPAID
+  PARTIALLY_PAID
+  PAID
+  CANCELLED
+}
+
+enum TransactionConfirmationStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+}
+
+enum ExpenseFundingSource {
+  DIRECT_CASH
+  MEMBER_ADVANCE
+}
+
+enum ReimbursementStatus {
+  OUTSTANDING
+  PARTIALLY_SETTLED
+  SETTLED
+  CANCELLED
+}
+
+enum CashMovementDirection {
+  IN
+  OUT
+}
+
+enum CashMovementCategory {
+  OPENING_BALANCE
+  CONTRIBUTION_PAYMENT
+  DIRECT_EXPENSE
+  REIMBURSEMENT_PAYOUT
+  ADJUSTMENT
+}
+
+/// Entitas penghuni kost untuk pencatatan kas bersama.
+/// Terpisah dari akun autentikasi dan tanpa pembedaan role (hak akses setara).
+/// Anggota yang sudah keluar dari kost ditandai melalui `leftAt` agar histori tetap terjaga.
+model Member {
+  id        String    @id @default(uuid()) @db.Uuid
+  name      String
+  joinedAt  DateTime  @default(now())
+  leftAt    DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  custodianAccounts   CashAccount[]        @relation("CashAccountCustodian")
+  contributionCharges ContributionCharge[]
+  payments            Payment[]            @relation("MemberPayments")
+  recordedExpenses    Expense[]            @relation("ExpenseRecorder")
+  advancedExpenses    Expense[]            @relation("ExpenseAdvancer")
+  reimbursements      Reimbursement[]      @relation("ReimbursementBeneficiary")
+  actorCashMovements  CashMovement[]       @relation("CashMovementActor")
+  auditLogs           AuditLog[]           @relation("AuditLogActor")
+
+  @@index([leftAt])
+}
+
+/// Akun penyimpanan kas bersama (contoh: akun DANA khusus kas kost).
+model CashAccount {
+  id                String   @id @default(uuid()) @db.Uuid
+  code              String   @unique
+  name              String
+  provider          String
+  custodianMemberId String?  @db.Uuid
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  custodianMember      Member?               @relation("CashAccountCustodian", fields: [custodianMemberId], references: [id], onDelete: SetNull)
+  payments             Payment[]
+  directExpenses       Expense[]
+  reimbursementPayouts ReimbursementPayout[]
+  cashMovements        CashMovement[]
+}
+
+/// Kebijakan tarif iuran berdasarkan periode efektif (YYYY-MM).
+/// Perubahan tarif pada periode baru tidak mengubah tagihan historis.
+model ContributionPolicy {
+  id                  String   @id @default(uuid()) @db.Uuid
+  code                String   @unique
+  name                String
+  amountPerMember     Int
+  effectiveFromPeriod String
+  effectiveToPeriod   String?
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  charges ContributionCharge[]
+
+  @@index([effectiveFromPeriod, effectiveToPeriod])
+}
+
+/// Tagihan iuran rutin maupun tambahan per anggota untuk suatu periode (YYYY-MM).
+model ContributionCharge {
+  id              String                   @id @default(uuid()) @db.Uuid
+  memberId        String                   @db.Uuid
+  policyId        String?                  @db.Uuid
+  period          String
+  kind            ContributionChargeKind   @default(REGULAR)
+  sequence        Int                      @default(1)
+  title           String
+  amount          Int
+  allocatedAmount Int                      @default(0)
+  status          ContributionChargeStatus @default(UNPAID)
+  dueDate         DateTime?
+  idempotencyKey  String?                  @unique
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  member      Member              @relation(fields: [memberId], references: [id], onDelete: Restrict)
+  policy      ContributionPolicy? @relation(fields: [policyId], references: [id], onDelete: SetNull)
+  allocations PaymentAllocation[]
+
+  @@unique([memberId, period, kind, sequence])
+  @@index([period, status])
+}
+
+/// Pembayaran iuran oleh anggota (dapat berupa pembayaran penuh atau parsial).
+/// Hanya pembayaran berstatus CONFIRMED yang dialokasikan dan menambah saldo kas.
+model Payment {
+  id             String                        @id @default(uuid()) @db.Uuid
+  memberId       String                        @db.Uuid
+  cashAccountId  String                        @db.Uuid
+  amount         Int
+  status         TransactionConfirmationStatus @default(PENDING)
+  paidAt         DateTime                      @default(now())
+  confirmedAt    DateTime?
+  idempotencyKey String                        @unique
+  note           String?
+  createdAt      DateTime                      @default(now())
+  updatedAt      DateTime                      @updatedAt
+
+  member       Member              @relation("MemberPayments", fields: [memberId], references: [id], onDelete: Restrict)
+  cashAccount  CashAccount         @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
+  allocations  PaymentAllocation[]
+  cashMovement CashMovement?
+
+  @@index([memberId, status])
+}
+
+/// Alokasi nominal dari satu Payment ke satu atau lebih ContributionCharge.
+model PaymentAllocation {
+  id        String   @id @default(uuid()) @db.Uuid
+  paymentId String   @db.Uuid
+  chargeId  String   @db.Uuid
+  amount    Int
+  createdAt DateTime @default(now())
+
+  payment Payment            @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  charge  ContributionCharge @relation(fields: [chargeId], references: [id], onDelete: Restrict)
+
+  @@unique([paymentId, chargeId])
+}
+
+/// Kategori dan subkategori pengeluaran operasional kost yang dinamis.
+model ExpenseCategory {
+  id        String   @id @default(uuid()) @db.Uuid
+  slug      String   @unique
+  name      String
+  parentId  String?  @db.Uuid
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  parent   ExpenseCategory?  @relation("ExpenseCategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children ExpenseCategory[] @relation("ExpenseCategoryHierarchy")
+  expenses Expense[]
+}
+
+/// Pengeluaran operasional kost (dibayar langsung dari kas atau ditalangi anggota).
+model Expense {
+  id                 String                        @id @default(uuid()) @db.Uuid
+  categoryId         String                        @db.Uuid
+  title              String
+  amount             Int
+  fundingSource      ExpenseFundingSource
+  status             TransactionConfirmationStatus @default(PENDING)
+  cashAccountId      String?                       @db.Uuid
+  advancedByMemberId String?                       @db.Uuid
+  recordedByMemberId String?                       @db.Uuid
+  expenseDate        DateTime                      @default(now())
+  confirmedAt        DateTime?
+  idempotencyKey     String                        @unique
+  note               String?
+  createdAt          DateTime                      @default(now())
+  updatedAt          DateTime                      @updatedAt
+
+  category         ExpenseCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  cashAccount      CashAccount?    @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
+  advancedByMember Member?         @relation("ExpenseAdvancer", fields: [advancedByMemberId], references: [id], onDelete: Restrict)
+  recordedByMember Member?         @relation("ExpenseRecorder", fields: [recordedByMemberId], references: [id], onDelete: SetNull)
+  reimbursement    Reimbursement?
+  cashMovement     CashMovement?
+
+  @@index([categoryId, status])
+  @@index([fundingSource, status])
+}
+
+/// Kewajiban penggantian dana talangan anggota (Reimbursement).
+model Reimbursement {
+  id                  String              @id @default(uuid()) @db.Uuid
+  expenseId           String              @unique @db.Uuid
+  beneficiaryMemberId String              @db.Uuid
+  totalAmount         Int
+  settledAmount       Int                 @default(0)
+  status              ReimbursementStatus @default(OUTSTANDING)
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+
+  expense           Expense               @relation(fields: [expenseId], references: [id], onDelete: Restrict)
+  beneficiaryMember Member                @relation("ReimbursementBeneficiary", fields: [beneficiaryMemberId], references: [id], onDelete: Restrict)
+  payouts           ReimbursementPayout[]
+
+  @@index([beneficiaryMemberId, status])
+}
+
+/// Pencairan (pelunasan penuh atau parsial) atas kewajiban Reimbursement.
+/// Mengurangi saldo kas dan kewajiban reimbursement tanpa mencatat Expense kedua.
+model ReimbursementPayout {
+  id              String   @id @default(uuid()) @db.Uuid
+  reimbursementId String   @db.Uuid
+  cashAccountId   String   @db.Uuid
+  amount          Int
+  paidAt          DateTime @default(now())
+  idempotencyKey  String   @unique
+  note            String?
+  createdAt       DateTime @default(now())
+
+  reimbursement Reimbursement @relation(fields: [reimbursementId], references: [id], onDelete: Restrict)
+  cashAccount   CashAccount   @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
+  cashMovement  CashMovement?
+}
+
+/// Buku besar mutasi kas (Cash Ledger) sebagai sumber perhitungan saldo kas aktual.
+model CashMovement {
+  id                    String                        @id @default(uuid()) @db.Uuid
+  cashAccountId         String                        @db.Uuid
+  direction             CashMovementDirection
+  category              CashMovementCategory
+  amount                Int
+  status                TransactionConfirmationStatus @default(CONFIRMED)
+  occurredAt            DateTime                      @default(now())
+  description           String
+  actorMemberId         String?                       @db.Uuid
+  paymentId             String?                       @unique @db.Uuid
+  expenseId             String?                       @unique @db.Uuid
+  reimbursementPayoutId String?                       @unique @db.Uuid
+  idempotencyKey        String                        @unique
+  createdAt             DateTime                      @default(now())
+
+  cashAccount         CashAccount          @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
+  actorMember         Member?              @relation("CashMovementActor", fields: [actorMemberId], references: [id], onDelete: SetNull)
+  payment             Payment?             @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  expense             Expense?             @relation(fields: [expenseId], references: [id], onDelete: Restrict)
+  reimbursementPayout ReimbursementPayout? @relation(fields: [reimbursementPayoutId], references: [id], onDelete: Restrict)
+
+  @@index([cashAccountId, status, occurredAt])
+}
+
+/// Jejak audit perubahan dan koreksi transaksi keuangan.
+model AuditLog {
+  id            String   @id @default(uuid()) @db.Uuid
+  actorMemberId String?  @db.Uuid
+  actorName     String?
+  action        String
+  entityType    String
+  entityId      String
+  summary       String
+  metadata      Json?
+  createdAt     DateTime @default(now())
+
+  actorMember Member? @relation("AuditLogActor", fields: [actorMemberId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
