@@ -54,6 +54,7 @@ export async function getLiveDashboardData(
     effectivePolicy,
     periodCharges,
     outstandingReimbursements,
+    confirmedPeriodExpensesAgg,
   ] = await Promise.all([
     db.cashAccount.findFirst({
       where: { isActive: true },
@@ -86,6 +87,18 @@ export async function getLiveDashboardData(
         expense: true,
       },
       orderBy: { createdAt: "desc" },
+    }),
+    db.expense.aggregate({
+      where: {
+        status: "CONFIRMED",
+        expenseDate: {
+          gte: periodStart,
+          lt: nextPeriodStart,
+        },
+      },
+      _sum: {
+        amount: true,
+      },
     }),
   ]);
 
@@ -286,6 +299,8 @@ export async function getLiveDashboardData(
       directOperatingExpensesThisMonth,
       reimbursementSettlementsThisMonth,
       totalCashOutflowThisMonth,
+      totalConfirmedOperatingExpensesThisMonth:
+        confirmedPeriodExpensesAgg._sum.amount ?? 0,
       actualCashBalance,
       pendingReimbursementTotal,
       pendingReimbursementCount: outstandingReimbursements.length,

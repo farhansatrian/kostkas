@@ -66,6 +66,45 @@ function assertPositiveInteger(amount: number, fieldName: string): void {
   }
 }
 
+type PrismaTx = Parameters<Parameters<PrismaClient["$transaction"]>[0]>[0];
+
+async function assertSufficientCashBalanceInTx(
+  tx: PrismaTx,
+  cashAccountId: string,
+  requiredOutflowAmount: number,
+  allowNegativeBalance = false
+): Promise<number> {
+  await tx.$queryRaw`SELECT id FROM "CashAccount" WHERE id = ${cashAccountId}::uuid FOR UPDATE`;
+
+  const confirmedMovements = await tx.cashMovement.findMany({
+    where: {
+      cashAccountId,
+      status: "CONFIRMED",
+    },
+    select: {
+      direction: true,
+      amount: true,
+    },
+  });
+
+  let actualBalance = 0;
+  for (const mov of confirmedMovements) {
+    if (mov.direction === "IN") {
+      actualBalance += mov.amount;
+    } else {
+      actualBalance -= mov.amount;
+    }
+  }
+
+  if (!allowNegativeBalance && actualBalance < requiredOutflowAmount) {
+    throw new Error(
+      `Saldo kas DANA tidak mencukupi (Saldo tersedia: Rp${actualBalance.toLocaleString("id-ID")}, dibutuhkan: Rp${requiredOutflowAmount.toLocaleString("id-ID")}).`
+    );
+  }
+
+  return actualBalance;
+}
+
 /**
  * Mengambil kebijakan iuran aktif untuk periode tertentu (YYYY-MM).
  */
@@ -491,6 +530,10 @@ export async function recordContributionPayment(
       };
     }
 
+    for (const targetId of input.targetChargeIds) {
+      await tx.$queryRaw`SELECT id FROM "ContributionCharge" WHERE id = ${targetId}::uuid FOR UPDATE`;
+    }
+
     const charges = await tx.contributionCharge.findMany({
       where: {
         id: { in: input.targetChargeIds },
@@ -610,6 +653,11 @@ export async function confirmPendingContributionPayment(
   }
 ): Promise<PaymentProcessResult> {
   return db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Payment" WHERE id = ${input.paymentId}::uuid FOR UPDATE`;
+    for (const targetId of input.targetChargeIds) {
+      await tx.$queryRaw`SELECT id FROM "ContributionCharge" WHERE id = ${targetId}::uuid FOR UPDATE`;
+    }
+
     const existingPayment = await tx.payment.findUnique({
       where: { id: input.paymentId },
       include: {
@@ -774,6 +822,7 @@ export async function recordDirectCashExpense(
     amount: number;
     idempotencyKey: string;
     confirmImmediately?: boolean;
+    allowNegativeBalance?: boolean;
     recordedByMemberId?: string;
     expenseDate?: Date;
     note?: string;
@@ -796,6 +845,15 @@ export async function recordDirectCashExpense(
     }
 
     const shouldConfirm = input.confirmImmediately ?? true;
+    if (shouldConfirm) {
+      await assertSufficientCashBalanceInTx(
+        tx,
+        input.cashAccountId,
+        input.amount,
+        input.allowNegativeBalance ?? false
+      );
+    }
+
     const now = input.expenseDate ?? new Date();
 
     const expense = await tx.expense.create({
@@ -932,6 +990,433 @@ export async function recordMemberAdvanceExpense(
 }
 
 /**
+ * Mencatat pengeluaran talangan anggota (MEMBER_ADVANCE) dalam status PENDING
+ * (belum membuat klaim Reimbursement aktif sampai dikonfirmasi).
+ */
+export async function recordPendingMemberAdvanceExpense(
+  db: PrismaClient,
+  input: {
+    categoryId: string;
+    advancedByMemberId: string;
+    title: string;
+    amount: number;
+    idempotencyKey: string;
+    recordedByMemberId?: string;
+    expenseDate?: Date;
+    note?: string;
+  }
+): Promise<{ expense: Expense; wasDuplicateRequest: boolean }> {
+  assertPositiveInteger(input.amount, "amount");
+
+  return db.$transaction(async (tx) => {
+    const existing = await tx.expense.findUnique({
+      where: { idempotencyKey: input.idempotencyKey },
+    });
+
+    if (existing) {
+      return {
+        expense: existing,
+        wasDuplicateRequest: true,
+      };
+    }
+
+    const now = input.expenseDate ?? new Date();
+
+    const expense = await tx.expense.create({
+      data: {
+        categoryId: input.categoryId,
+        title: input.title,
+        amount: input.amount,
+        fundingSource: "MEMBER_ADVANCE",
+        status: "PENDING",
+        advancedByMemberId: input.advancedByMemberId,
+        recordedByMemberId:
+          input.recordedByMemberId ?? input.advancedByMemberId,
+        expenseDate: now,
+        confirmedAt: null,
+        idempotencyKey: input.idempotencyKey,
+        note: input.note ?? null,
+      },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        actorMemberId: input.recordedByMemberId ?? input.advancedByMemberId,
+        action: "RECORD_PENDING_MEMBER_ADVANCE_EXPENSE",
+        entityType: "Expense",
+        entityId: expense.id,
+        summary: `Talangan anggota PENDING "${expense.title}" Rp${expense.amount} dicatat (menunggu konfirmasi klaim)`,
+      },
+    });
+
+    return {
+      expense,
+      wasDuplicateRequest: false,
+    };
+  });
+}
+
+/**
+ * Mengonfirmasi pengeluaran (DIRECT_CASH atau MEMBER_ADVANCE) yang sebelumnya berstatus PENDING:
+ * - Untuk DIRECT_CASH: memvalidasi kecukupan saldo kas DANA, mengubah status ke CONFIRMED, dan membuat CashMovement OUT.
+ * - Untuk MEMBER_ADVANCE: mengubah status ke CONFIRMED dan memastikan klaim Reimbursement (OUTSTANDING) terbentuk tanpa duplikasi.
+ */
+export async function confirmPendingExpense(
+  db: PrismaClient,
+  input: {
+    expenseId: string;
+    cashAccountId?: string;
+    actorMemberId?: string;
+    allowNegativeBalance?: boolean;
+    confirmedAt?: Date;
+  }
+): Promise<{
+  expense: Expense;
+  cashMovement: CashMovement | null;
+  reimbursement: Reimbursement | null;
+  wasDuplicateRequest: boolean;
+}> {
+  return db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Expense" WHERE id = ${input.expenseId}::uuid FOR UPDATE`;
+
+    const existing = await tx.expense.findUnique({
+      where: { id: input.expenseId },
+      include: {
+        cashMovement: true,
+        reimbursement: true,
+      },
+    });
+
+    if (!existing) {
+      throw new Error("Data pengeluaran tidak ditemukan.");
+    }
+
+    if (existing.status === "CONFIRMED") {
+      return {
+        expense: existing,
+        cashMovement: existing.cashMovement,
+        reimbursement: existing.reimbursement,
+        wasDuplicateRequest: true,
+      };
+    }
+
+    if (existing.status === "REJECTED") {
+      throw new Error(
+        "Pengeluaran yang sudah dibatalkan/ditolak tidak dapat dikonfirmasi."
+      );
+    }
+
+    const now = input.confirmedAt ?? new Date();
+
+    if (existing.fundingSource === "DIRECT_CASH") {
+      const targetCashAccountId =
+        existing.cashAccountId ?? input.cashAccountId ?? null;
+      if (!targetCashAccountId) {
+        throw new Error(
+          "Akun kas DANA wajib ditentukan untuk pengeluaran kas langsung."
+        );
+      }
+
+      await assertSufficientCashBalanceInTx(
+        tx,
+        targetCashAccountId,
+        existing.amount,
+        input.allowNegativeBalance ?? false
+      );
+
+      const updatedExpense = await tx.expense.update({
+        where: { id: existing.id },
+        data: {
+          cashAccountId: targetCashAccountId,
+          status: "CONFIRMED",
+          confirmedAt: now,
+        },
+      });
+
+      const cashMovement = await tx.cashMovement.create({
+        data: {
+          cashAccountId: targetCashAccountId,
+          direction: "OUT",
+          category: "DIRECT_EXPENSE",
+          amount: existing.amount,
+          status: "CONFIRMED",
+          occurredAt: now,
+          description: existing.title,
+          actorMemberId: input.actorMemberId ?? existing.recordedByMemberId,
+          expenseId: existing.id,
+          idempotencyKey: `CM:EXPENSE:${existing.idempotencyKey}`,
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          actorMemberId: input.actorMemberId ?? existing.recordedByMemberId,
+          action: "CONFIRM_PENDING_DIRECT_EXPENSE",
+          entityType: "Expense",
+          entityId: existing.id,
+          summary: `Konfirmasi pengeluaran kas langsung "${existing.title}" Rp${existing.amount}`,
+        },
+      });
+
+      return {
+        expense: updatedExpense,
+        cashMovement,
+        reimbursement: null,
+        wasDuplicateRequest: false,
+      };
+    }
+
+    if (!existing.advancedByMemberId) {
+      throw new Error(
+        "Anggota penanggung talangan wajib tercatat pada pengeluaran MEMBER_ADVANCE."
+      );
+    }
+
+    const updatedExpense = await tx.expense.update({
+      where: { id: existing.id },
+      data: {
+        status: "CONFIRMED",
+        confirmedAt: now,
+      },
+    });
+
+    const reimbursement =
+      existing.reimbursement ??
+      (await tx.reimbursement.create({
+        data: {
+          expenseId: existing.id,
+          beneficiaryMemberId: existing.advancedByMemberId,
+          totalAmount: existing.amount,
+          settledAmount: 0,
+          status: "OUTSTANDING",
+        },
+      }));
+
+    await tx.auditLog.create({
+      data: {
+        actorMemberId: input.actorMemberId ?? existing.recordedByMemberId,
+        action: "CONFIRM_PENDING_MEMBER_ADVANCE_EXPENSE",
+        entityType: "Reimbursement",
+        entityId: reimbursement.id,
+        summary: `Konfirmasi talangan anggota "${existing.title}" Rp${existing.amount} dan penerbitan klaim reimbursement`,
+      },
+    });
+
+    return {
+      expense: updatedExpense,
+      cashMovement: null,
+      reimbursement,
+      wasDuplicateRequest: false,
+    };
+  });
+}
+
+/**
+ * Membuat atau menghubungkan klaim Reimbursement dari transaksi MEMBER_ADVANCE secara idempotent.
+ * Tidak pernah membuat klaim ganda untuk pengeluaran yang sama.
+ */
+export async function ensureReimbursementForAdvanceExpense(
+  db: PrismaClient,
+  input: {
+    expenseId: string;
+    actorMemberId?: string;
+  }
+): Promise<{
+  expense: Expense;
+  reimbursement: Reimbursement;
+  wasDuplicateRequest: boolean;
+}> {
+  return db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Expense" WHERE id = ${input.expenseId}::uuid FOR UPDATE`;
+
+    const expense = await tx.expense.findUnique({
+      where: { id: input.expenseId },
+      include: { reimbursement: true },
+    });
+
+    if (!expense) {
+      throw new Error("Data pengeluaran tidak ditemukan.");
+    }
+
+    if (expense.fundingSource !== "MEMBER_ADVANCE") {
+      throw new Error(
+        "Klaim reimbursement hanya dapat dibuat untuk pengeluaran dengan sumber dana talangan anggota (MEMBER_ADVANCE)."
+      );
+    }
+
+    if (expense.status === "REJECTED") {
+      throw new Error(
+        "Pengeluaran yang sudah dibatalkan tidak dapat diajukan klaim reimbursement."
+      );
+    }
+
+    if (!expense.advancedByMemberId) {
+      throw new Error(
+        "Anggota yang menalangi pengeluaran tidak tercatat pada transaksi ini."
+      );
+    }
+
+    if (expense.reimbursement) {
+      return {
+        expense,
+        reimbursement: expense.reimbursement,
+        wasDuplicateRequest: true,
+      };
+    }
+
+    const updatedExpense =
+      expense.status === "CONFIRMED"
+        ? expense
+        : await tx.expense.update({
+            where: { id: expense.id },
+            data: {
+              status: "CONFIRMED",
+              confirmedAt: new Date(),
+            },
+          });
+
+    const reimbursement = await tx.reimbursement.create({
+      data: {
+        expenseId: expense.id,
+        beneficiaryMemberId: expense.advancedByMemberId,
+        totalAmount: expense.amount,
+        settledAmount: 0,
+        status: "OUTSTANDING",
+      },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        actorMemberId: input.actorMemberId ?? expense.recordedByMemberId,
+        action: "CREATE_REIMBURSEMENT_CLAIM",
+        entityType: "Reimbursement",
+        entityId: reimbursement.id,
+        summary: `Klaim reimbursement dibuat untuk talangan "${expense.title}" Rp${expense.amount}`,
+      },
+    });
+
+    return {
+      expense: updatedExpense,
+      reimbursement,
+      wasDuplicateRequest: false,
+    };
+  });
+}
+
+/**
+ * Membatalkan atau mengoreksi transaksi pengeluaran secara auditable TANPA menghapus histori database:
+ * - Mengubah status Expense menjadi REJECTED dan menambahkan alasan koreksi pada catatan.
+ * - Jika DIRECT_CASH sudah CONFIRMED: membuat jurnal pembalik CashMovement IN (ADJUSTMENT) agar saldo DANA pulih secara akuntabel.
+ * - Jika MEMBER_ADVANCE sudah memiliki klaim Reimbursement dan belum ada pencairan (settledAmount === 0): membatalkan klaim (CANCELLED).
+ */
+export async function reverseOrVoidExpense(
+  db: PrismaClient,
+  input: {
+    expenseId: string;
+    reason: string;
+    actorMemberId?: string;
+  }
+): Promise<{
+  expense: Expense;
+  reimbursement: Reimbursement | null;
+  reversalCashMovement: CashMovement | null;
+}> {
+  const cleanReason = input.reason.trim();
+  if (cleanReason.length < 3) {
+    throw new Error("Alasan pembatalan/koreksi pengeluaran wajib diisi.");
+  }
+
+  return db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Expense" WHERE id = ${input.expenseId}::uuid FOR UPDATE`;
+
+    const existing = await tx.expense.findUnique({
+      where: { id: input.expenseId },
+      include: {
+        cashMovement: true,
+        reimbursement: true,
+      },
+    });
+
+    if (!existing) {
+      throw new Error("Data pengeluaran yang akan dikoreksi tidak ditemukan.");
+    }
+
+    if (existing.status === "REJECTED") {
+      throw new Error("Pengeluaran ini sudah dibatalkan sebelumnya.");
+    }
+
+    if (
+      existing.fundingSource === "MEMBER_ADVANCE" &&
+      existing.reimbursement &&
+      existing.reimbursement.settledAmount > 0
+    ) {
+      throw new Error(
+        "Pengeluaran talangan yang sudah dicairkan sebagian atau seluruhnya tidak dapat dibatalkan langsung."
+      );
+    }
+
+    const updatedNote = existing.note
+      ? `${existing.note} | [BATAL/KOREKSI: ${cleanReason}]`
+      : `[BATAL/KOREKSI: ${cleanReason}]`;
+
+    const updatedExpense = await tx.expense.update({
+      where: { id: existing.id },
+      data: {
+        status: "REJECTED",
+        note: updatedNote,
+      },
+    });
+
+    let reversalCashMovement: CashMovement | null = null;
+    if (
+      existing.status === "CONFIRMED" &&
+      existing.fundingSource === "DIRECT_CASH" &&
+      existing.cashAccountId
+    ) {
+      reversalCashMovement = await tx.cashMovement.create({
+        data: {
+          cashAccountId: existing.cashAccountId,
+          direction: "IN",
+          category: "ADJUSTMENT",
+          amount: existing.amount,
+          status: "CONFIRMED",
+          occurredAt: new Date(),
+          description: `Jurnal pembalik pembatalan pengeluaran: ${existing.title} (${cleanReason})`,
+          actorMemberId: input.actorMemberId ?? existing.recordedByMemberId,
+          idempotencyKey: `CM:REVERSAL:EXPENSE:${existing.id}`,
+        },
+      });
+    }
+
+    let updatedReimbursement: Reimbursement | null = existing.reimbursement;
+    if (existing.reimbursement && existing.reimbursement.status !== "CANCELLED") {
+      updatedReimbursement = await tx.reimbursement.update({
+        where: { id: existing.reimbursement.id },
+        data: {
+          status: "CANCELLED",
+        },
+      });
+    }
+
+    await tx.auditLog.create({
+      data: {
+        actorMemberId: input.actorMemberId ?? existing.recordedByMemberId,
+        action: "VOID_OR_REVERSE_EXPENSE",
+        entityType: "Expense",
+        entityId: existing.id,
+        summary: `Pembatalan pengeluaran "${existing.title}" Rp${existing.amount} (${cleanReason})`,
+      },
+    });
+
+    return {
+      expense: updatedExpense,
+      reimbursement: updatedReimbursement,
+      reversalCashMovement,
+    };
+  });
+}
+
+/**
  * Mencairkan penggantian dana talangan (Reimbursement) secara penuh atau parsial dari akun kas DANA.
  * Mengurangi saldo DANA dan mengurangi kewajiban reimbursement, TANPA membuat Expense operasional kedua.
  */
@@ -942,6 +1427,7 @@ export async function settleReimbursementPayout(
     cashAccountId: string;
     amount: number;
     idempotencyKey: string;
+    allowNegativeBalance?: boolean;
     actorMemberId?: string;
     paidAt?: Date;
     note?: string;
@@ -950,6 +1436,8 @@ export async function settleReimbursementPayout(
   assertPositiveInteger(input.amount, "amount");
 
   return db.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT id FROM "Reimbursement" WHERE id = ${input.reimbursementId}::uuid FOR UPDATE`;
+
     const existingPayout = await tx.reimbursementPayout.findUnique({
       where: { idempotencyKey: input.idempotencyKey },
       include: {
@@ -979,6 +1467,10 @@ export async function settleReimbursementPayout(
       throw new Error("Data kewajiban reimbursement tidak ditemukan.");
     }
 
+    if (reimbursement.status === "CANCELLED") {
+      throw new Error("Klaim reimbursement yang sudah dibatalkan tidak dapat dicairkan.");
+    }
+
     const currentOutstanding =
       reimbursement.totalAmount - reimbursement.settledAmount;
 
@@ -987,6 +1479,13 @@ export async function settleReimbursementPayout(
         `Nominal pencairan (Rp${input.amount}) melebihi sisa utang reimbursement (Rp${currentOutstanding}).`
       );
     }
+
+    await assertSufficientCashBalanceInTx(
+      tx,
+      input.cashAccountId,
+      input.amount,
+      input.allowNegativeBalance ?? false
+    );
 
     const now = input.paidAt ?? new Date();
 

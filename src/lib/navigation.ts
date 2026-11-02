@@ -57,13 +57,13 @@ export const APP_NAVIGATION_MODULES: NavigationModuleItem[] = [
     id: "expenses",
     label: "Pengeluaran",
     href: "/pengeluaran",
-    implemented: false,
+    implemented: true,
   },
   {
     id: "reimbursements",
     label: "Reimbursement",
     href: "/reimbursement",
-    implemented: false,
+    implemented: true,
   },
   {
     id: "budgets",

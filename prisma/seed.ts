@@ -23,30 +23,54 @@ const SEED_MEMBERS = [
   },
 ] as const;
 
-const SEED_CATEGORIES = [
+const SEED_PARENT_CATEGORIES = [
   {
-    slug: "wifi",
-    name: "Wi-Fi",
+    slug: "tagihan-utilitas",
+    name: "Tagihan & Utilitas",
   },
   {
-    slug: "token-listrik",
-    name: "Token Listrik",
-  },
-  {
-    slug: "air-galon",
-    name: "Air Galon",
+    slug: "konsumsi-bersama",
+    name: "Konsumsi Bersama",
   },
   {
     slug: "kebersihan",
-    name: "Kebersihan",
+    name: "Kebersihan & Perlengkapan",
   },
   {
     slug: "perawatan",
-    name: "Perawatan",
+    name: "Perawatan & Perbaikan",
   },
   {
     slug: "lainnya",
     name: "Lainnya",
+  },
+] as const;
+
+const SEED_SUBCATEGORIES = [
+  {
+    slug: "wifi",
+    name: "Wi-Fi",
+    parentSlug: "tagihan-utilitas",
+  },
+  {
+    slug: "token-listrik",
+    name: "Token Listrik",
+    parentSlug: "tagihan-utilitas",
+  },
+  {
+    slug: "air-galon",
+    name: "Air Galon",
+    parentSlug: "konsumsi-bersama",
+  },
+  {
+    slug: "kebutuhan-dapur",
+    name: "Kebutuhan Dapur",
+    parentSlug: "konsumsi-bersama",
+  },
+  {
+    slug: "kebersihan-kamar-mandi",
+    name: "Sabun & Pembersih Kamar Mandi",
+    parentSlug: "kebersihan",
   },
 ] as const;
 
@@ -129,7 +153,7 @@ async function main(): Promise<void> {
 
   // 4. Upsert Kategori Pengeluaran Utama
   const categoryMap = new Map<string, string>();
-  for (const cat of SEED_CATEGORIES) {
+  for (const cat of SEED_PARENT_CATEGORIES) {
     const saved = await prisma.expenseCategory.upsert({
       where: { slug: cat.slug },
       update: {
@@ -147,20 +171,20 @@ async function main(): Promise<void> {
     categoryMap.set(cat.slug, saved.id);
   }
 
-  // 5. Upsert Contoh Subkategori Dinamis (di bawah kategori Kebersihan)
-  const kebersihanId = categoryMap.get("kebersihan");
-  if (kebersihanId) {
+  // 5. Upsert Subkategori Dinamis
+  for (const sub of SEED_SUBCATEGORIES) {
+    const parentId = categoryMap.get(sub.parentSlug) ?? null;
     await prisma.expenseCategory.upsert({
-      where: { slug: "kebersihan-kamar-mandi" },
+      where: { slug: sub.slug },
       update: {
-        name: "Sabun & Pembersih Kamar Mandi",
-        parentId: kebersihanId,
+        name: sub.name,
+        parentId,
         isActive: true,
       },
       create: {
-        slug: "kebersihan-kamar-mandi",
-        name: "Sabun & Pembersih Kamar Mandi",
-        parentId: kebersihanId,
+        slug: sub.slug,
+        name: sub.name,
+        parentId,
         isActive: true,
       },
     });
