@@ -49,8 +49,13 @@ fi
 # Mode 1: Restore ke kontainer Docker PostgreSQL
 if [ -n "$CONTAINER_TARGET" ]; then
   echo "[KostKas Restore] Memulihkan ke kontainer Docker '${CONTAINER_TARGET}'..."
-  CONTAINER_USER=$(docker exec "$CONTAINER_TARGET" printenv POSTGRES_USER || echo "kostkas_app")
-  CONTAINER_DB="${TARGET_DATABASE:-$(docker exec "$CONTAINER_TARGET" printenv POSTGRES_DB || echo "kostkas_db")}"
+  CONTAINER_USER=$(docker exec "$CONTAINER_TARGET" printenv POSTGRES_USER || echo "${POSTGRES_USER:-}")
+  CONTAINER_DB="${TARGET_DATABASE:-$(docker exec "$CONTAINER_TARGET" printenv POSTGRES_DB || echo "${POSTGRES_DB:-}")}"
+
+  if [ -z "$CONTAINER_USER" ] || [ -z "$CONTAINER_DB" ]; then
+    echo "[KostKas Restore ERROR] Gagal mendeteksi POSTGRES_USER atau POSTGRES_DB dari kontainer '${CONTAINER_TARGET}'." >&2
+    exit 1
+  fi
 
   gunzip -c "$BACKUP_FILE" | docker exec -i "$CONTAINER_TARGET" psql -U "$CONTAINER_USER" -d "$CONTAINER_DB"
   echo "[KostKas Restore SUKSES] Database '$CONTAINER_DB' di kontainer '${CONTAINER_TARGET}' berhasil dipulihkan dari $BACKUP_FILE."

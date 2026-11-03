@@ -30,10 +30,16 @@ fi
 # Prioritas 1: Jalankan pg_dump via Docker container jika terdeteksi
 if [ -n "$CONTAINER_TARGET" ]; then
   echo "[KostKas Backup] Menggunakan kontainer Docker '${CONTAINER_TARGET}'..."
-  CONTAINER_USER=$(docker exec "$CONTAINER_TARGET" printenv POSTGRES_USER || echo "kostkas_app")
-  CONTAINER_DB="${TARGET_DATABASE:-$(docker exec "$CONTAINER_TARGET" printenv POSTGRES_DB || echo "kostkas_db")}"
+  CONTAINER_USER=$(docker exec "$CONTAINER_TARGET" printenv POSTGRES_USER || echo "${POSTGRES_USER:-}")
+  CONTAINER_DB="${TARGET_DATABASE:-$(docker exec "$CONTAINER_TARGET" printenv POSTGRES_DB || echo "${POSTGRES_DB:-}")}"
 
-  docker exec -t "$CONTAINER_TARGET" pg_dump -U "$CONTAINER_USER" -d "$CONTAINER_DB" --clean --if-exists --no-owner --no-privileges | gzip > "$BACKUP_PATH"
+  if [ -z "$CONTAINER_USER" ] || [ -z "$CONTAINER_DB" ]; then
+    echo "[KostKas Backup ERROR] Gagal mendeteksi POSTGRES_USER atau POSTGRES_DB dari kontainer '${CONTAINER_TARGET}'." >&2
+    exit 1
+  fi
+
+  # PERINGATAN KRITIS: JANGAN gunakan flag -t (pseudo-TTY) karena akan merusak aliran biner / kompresi gzip
+  docker exec -i "$CONTAINER_TARGET" pg_dump -U "$CONTAINER_USER" -d "$CONTAINER_DB" --clean --if-exists --no-owner --no-privileges | gzip > "$BACKUP_PATH"
 
 # Prioritas 2: Gunakan pg_dump sistem jika DATABASE_URL tersedia
 elif command -v pg_dump >/dev/null 2>&1 && [ -n "${DATABASE_URL:-}" ]; then

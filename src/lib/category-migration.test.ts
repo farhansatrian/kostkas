@@ -56,7 +56,14 @@ async function cleanupMigrationTestData() {
   // Bersihkan kategori uji kustom
   await prisma.expenseCategory.deleteMany({
     where: {
-      slug: { in: ["custom-kopi-mig", "custom-snack-sub-mig"] },
+      slug: {
+        in: [
+          "custom-kopi-mig",
+          "custom-snack-sub-mig",
+          "perbaikan-genteng-kustom",
+          "listrik-kamar-kustom",
+        ],
+      },
     },
   });
 }
@@ -145,6 +152,44 @@ async function runCategoryMigrationVerification() {
     update: { isActive: true, parentId: customParent.id },
   });
 
+  // Kategori kustom dengan kemiripan nama legacy
+  await prisma.expenseCategory.upsert({
+    where: { slug: "perbaikan-genteng-kustom" },
+    create: {
+      name: "Perbaikan Genteng Bocor",
+      slug: "perbaikan-genteng-kustom",
+      isActive: true,
+    },
+    update: { isActive: true },
+  });
+
+  await prisma.expenseCategory.upsert({
+    where: { slug: "listrik-kamar-kustom" },
+    create: {
+      name: "Listrik Tambahan Kamar",
+      slug: "listrik-kamar-kustom",
+      isActive: true,
+    },
+    update: { isActive: true },
+  });
+
+  // Skenario khusus audit parentId:
+  // Kategori "galon" yang sebelumnya memiliki parent legacy (galon-gas) harus dilepaskan ke root (parentId = NULL)
+  await prisma.expenseCategory.upsert({
+    where: { slug: "galon" },
+    create: {
+      name: "Galon Air Minum",
+      slug: "galon",
+      parentId: legacyGalonGas.id,
+      isActive: false, // sengaja nonaktif untuk menguji aktivasi
+    },
+    update: {
+      name: "Galon Air Minum",
+      parentId: legacyGalonGas.id,
+      isActive: false,
+    },
+  });
+
   // 4. Catat transaksi historis pada kategori legacy dan kustom
   const expLegacy1 = await prisma.expense.create({
     data: {
@@ -224,7 +269,7 @@ async function runCategoryMigrationVerification() {
   const migrationSql = fs.readFileSync(migrationFilePath, "utf8");
   console.log("\nMengeksekusi SQL migration...");
 
-  // Eksekusi SQL di dalam transaction
+  // Eksekusi SQL migrasi
   await prisma.$executeRawUnsafe(migrationSql);
   console.log("✓ SQL migration pertama berhasil dieksekusi.");
 
@@ -253,7 +298,7 @@ async function runCategoryMigrationVerification() {
   assert.equal(checkAlloc?.categoryId, legacyGalonGas.id, "Pagu anggaran harus tetap mereferensikan categoryId aslinya.");
   console.log("✓ [Verifikasi 2] Seluruh foreign key transaksi lama tetap utuh tanpa mutasi sembarangan.");
 
-  // C. 5 Kategori final wajib aktif dan berada di root
+  // C. 5 Kategori final wajib aktif dan berada di root (termasuk galon yang dilepaskan dari parent legacy)
   const FINAL_SLUGS = ["galon", "listrik", "wifi", "alat-mandi", "lainnya"];
   for (const slug of FINAL_SLUGS) {
     const cat = await prisma.expenseCategory.findUnique({ where: { slug } });
@@ -272,27 +317,47 @@ async function runCategoryMigrationVerification() {
   assert.equal(updatedListrikWifi.isActive, false, "Kategori legacy listrik-wifi harus dinonaktifkan.");
   console.log("✓ [Verifikasi 4] Kategori legacy dinonaktifkan dengan aman tanpa menghapus entri database.");
 
-  // E. Kategori kustom buatan pengguna dan subkategorinya tidak boleh berubah
+  // E. Kategori kustom buatan pengguna tidak dinonaktifkan hanya karena kemiripan nama
+  const checkCustomPerbaikan = await prisma.expenseCategory.findUnique({ where: { slug: "perbaikan-genteng-kustom" } });
+  const checkCustomListrik = await prisma.expenseCategory.findUnique({ where: { slug: "listrik-kamar-kustom" } });
+  assert.ok(checkCustomPerbaikan && checkCustomListrik);
+  assert.equal(checkCustomPerbaikan.isActive, true, "Kategori kustom 'perbaikan-genteng-kustom' tidak boleh dinonaktifkan!");
+  assert.equal(checkCustomListrik.isActive, true, "Kategori kustom 'listrik-kamar-kustom' tidak boleh dinonaktifkan!");
+
+  // Kategori kustom buatan pengguna dan subkategorinya tidak boleh berubah
   const checkCustomParent = await prisma.expenseCategory.findUnique({ where: { slug: "custom-kopi-mig" } });
   const checkCustomChild = await prisma.expenseCategory.findUnique({ where: { slug: "custom-snack-sub-mig" } });
   assert.ok(checkCustomParent && checkCustomChild);
   assert.equal(checkCustomParent.isActive, true, "Kategori kustom pengguna tidak boleh diubah statusnya.");
   assert.equal(checkCustomChild.isActive, true, "Subkategori kustom pengguna tidak boleh diubah statusnya.");
   assert.equal(checkCustomChild.parentId, customParent.id, "Relasi parent-child kustom pengguna tidak boleh rusak.");
-  console.log("✓ [Verifikasi 5] Kategori kustom dan struktur parent-child pengguna 100% terlindungi.");
+  console.log("✓ [Verifikasi 5] Kategori kustom dan struktur parent-child pengguna 100% terlindungi (tidak salah sasaran nama mirip).");
 
-  // 8. PENGUJIAN IDEMPOTENCY: Jalankan SQL migrasi kedua kali
-  console.log("\nMenguji idempotency (menjalankan ulang SQL migration)...");
+  // F. Uji Idempotency Sejati: Catat updatedAt sebelum eksekusi kedua
+  const categoriesBeforeSecondRun = await prisma.expenseCategory.findMany({
+    select: { id: true, slug: true, updatedAt: true },
+  });
+  const updatedAtMapBefore = new Map(categoriesBeforeSecondRun.map((c) => [c.id, c.updatedAt.toISOString()]));
+
+  // Berikan jeda waktu kecil untuk memastikan pergeseran waktu terbaca jika ada update
+  await new Promise((resolve) => setTimeout(resolve, 150));
+
+  console.log("\nMenguji idempotency sejati (menjalankan ulang SQL migration)...");
   await prisma.$executeRawUnsafe(migrationSql);
 
-  const expenseCountIdempotent = await prisma.expense.count();
-  assert.equal(expenseCountIdempotent, expenseCountBefore, "Eksekusi ulang migrasi tidak boleh mengubah data.");
+  const categoriesAfterSecondRun = await prisma.expenseCategory.findMany({
+    select: { id: true, slug: true, updatedAt: true },
+  });
 
-  for (const slug of FINAL_SLUGS) {
-    const cat = await prisma.expenseCategory.findUnique({ where: { slug } });
-    assert.equal(cat?.isActive, true);
+  for (const cat of categoriesAfterSecondRun) {
+    const prevUpdatedAt = updatedAtMapBefore.get(cat.id);
+    assert.equal(
+      cat.updatedAt.toISOString(),
+      prevUpdatedAt,
+      `Kategori '${cat.slug}' tidak boleh mengubah updatedAt saat tidak ada perubahan data!`
+    );
   }
-  console.log("✓ [Verifikasi 6] SQL migration terbukti 100% idempotent dan aman dijalankan berulang kali.");
+  console.log("✓ [Verifikasi 6] SQL migration terbukti 100% idempotent sejati: 'updatedAt' tidak dimodifikasi tanpa perubahan data.");
 
   await cleanupMigrationTestData();
   console.log("\n=== SELURUH PENGUJIAN KATEGORI MIGRATION LULUS 100% ===");

@@ -1,8 +1,13 @@
 -- Migration: 20261103140000_sync_v102_expense_categories
 -- Tujuan: Sinkronisasi non-destruktif 5 kategori default KostKas v1.0.2 dan penonaktifan kategori legacy
--- Sifat: Data-only, idempotent, zero data loss (mempertahankan seluruh foreign key & transaksi historis)
+-- Sifat: Data-only, idempotent sejati, zero data loss (mempertahankan seluruh foreign key & transaksi historis)
 
--- 1. Pastikan 5 kategori operasional final aktif di tingkat root
+-- 1. Pastikan 5 kategori operasional final aktif di tingkat root.
+--    Jika kategori sudah ada:
+--    - Hanya perbarui "name", "isActive", dan "updatedAt" jika terdapat perbedaan data (true idempotency).
+--    - Tangani "parentId": jika sebelumnya menjadi anak dari kategori legacy yang dinonaktifkan,
+--      lepaskan hubungannya ("parentId" = NULL) agar dapat digunakan mandiri di tingkat root.
+--    - Jika sudah memiliki parent aktif non-legacy, pertahankan relasi parent/subcategory yang dibuat pengguna.
 INSERT INTO "ExpenseCategory" ("id", "slug", "name", "parentId", "isActive", "createdAt", "updatedAt")
 VALUES
     (gen_random_uuid(), 'galon', 'Galon', NULL, true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
@@ -13,11 +18,55 @@ VALUES
 ON CONFLICT ("slug") DO UPDATE SET
     "name" = EXCLUDED."name",
     "isActive" = true,
-    "parentId" = NULL,
-    "updatedAt" = CURRENT_TIMESTAMP;
+    "parentId" = CASE
+        WHEN "ExpenseCategory"."parentId" IN (
+            SELECT "id" FROM "ExpenseCategory" WHERE "slug" IN (
+                'galon-gas',
+                'listrik-wifi',
+                'kebersihan-dapur',
+                'perbaikan',
+                'tagihan-utilitas',
+                'konsumsi-bersama',
+                'kebersihan',
+                'perawatan',
+                'token-listrik',
+                'air-galon',
+                'kebutuhan-dapur',
+                'kebersihan-kamar-mandi'
+            )
+        ) THEN NULL
+        ELSE "ExpenseCategory"."parentId"
+    END,
+    "updatedAt" = CURRENT_TIMESTAMP
+WHERE
+    "ExpenseCategory"."name" IS DISTINCT FROM EXCLUDED."name"
+    OR "ExpenseCategory"."isActive" IS NOT TRUE
+    OR (
+        "ExpenseCategory"."parentId" IS NOT NULL
+        AND "ExpenseCategory"."parentId" IN (
+            SELECT "id" FROM "ExpenseCategory" WHERE "slug" IN (
+                'galon-gas',
+                'listrik-wifi',
+                'kebersihan-dapur',
+                'perbaikan',
+                'tagihan-utilitas',
+                'konsumsi-bersama',
+                'kebersihan',
+                'perawatan',
+                'token-listrik',
+                'air-galon',
+                'kebutuhan-dapur',
+                'kebersihan-kamar-mandi'
+            )
+        )
+    );
 
--- 2. Nonaktifkan kategori legacy agar tidak muncul di form transaksi baru,
---    namun pertahankan baris data secara utuh agar transaksi & pagu anggaran historis tidak hilang.
+-- 2. Nonaktifkan kategori legacy bawaan yang telah digantikan oleh 5 kategori v1.0.2.
+--    Pencocokan menggunakan slug eksak (whitelist), bukan wildcard/LIKE, sehingga kategori
+--    kustom pengguna (misal: 'perbaikan-genteng', 'listrik-kamar-1') tetap 100% aman dan aktif.
+--    Hanya memperbarui baris yang saat ini masih aktif ("isActive" = true), sehingga tidak
+--    mengubah "updatedAt" bila sudah dinonaktifkan. Seluruh riwayat transaksi, anggaran,
+--    dan log audit tetap utuh tanpa ada baris data yang dihapus.
 UPDATE "ExpenseCategory"
 SET
     "isActive" = false,
@@ -37,4 +86,3 @@ WHERE "slug" IN (
     'kebersihan-kamar-mandi'
 )
 AND "isActive" = true;
-
