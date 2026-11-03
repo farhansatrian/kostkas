@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build --webpack",
+    "build": "next build --webpack && node scripts/verify-production-css.mjs",
+    "verify:css": "node scripts/verify-production-css.mjs",
     "start": "next start",
     "lint": "eslint",
     "db:seed": "./node_modules/.bin/jiti prisma/seed.ts",
@@ -34,13 +35,14 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@tailwindcss/turbopack": "^4",
+    "@tailwindcss/postcss": "^4.3.4",
     "@types/node": "^20",
     "@types/pg": "^8.23.1",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.4.3",
+    "postcss": "^8.5.32",
     "prisma": "^7.10.1",
     "tailwindcss": "^4",
     "typescript": "^5"

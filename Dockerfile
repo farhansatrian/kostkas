@@ -27,11 +27,13 @@ COPY prisma ./prisma
 COPY prisma7.config.ts ./
 RUN npx prisma generate
 
-# Salin kode sumber aplikasi
+# Salin kode sumber aplikasi & konfigurasi build CSS
 COPY src ./src
 COPY public ./public
+COPY scripts ./scripts
 COPY tsconfig.json ./
 COPY next.config.ts ./
+COPY postcss.config.mjs ./
 
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production

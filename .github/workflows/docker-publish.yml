@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: "Custom tag name (optional, misal: v1.0.0)"
+        description: "Custom tag name (optional, misal: v1.0.1)"
         required: false
         default: ""
 
