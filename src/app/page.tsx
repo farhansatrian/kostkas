@@ -78,6 +78,7 @@ async function DashboardContent() {
                   title="Saldo Kas Riil DANA"
                   content={`Uang fisik bersama yang saat ini tersimpan di dompet digital ${config.cashAccountProvider} atas nama ${config.cashAccountHolder}. Bukan target iuran, melainkan saldo nyata yang siap dipakai.`}
                   label="Info saldo kas riil"
+                  side="bottom"
                 />
               </div>
               <p className="mt-2 text-3xl sm:text-4xl font-semibold tracking-tight text-slate-900 tabular-nums">
@@ -183,6 +184,14 @@ async function DashboardContent() {
                   <span className="font-medium text-slate-700">
                     {formatRupiah(
                       cashSummary.reimbursementSettlementsThisMonth
+                    )}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-100">
+                  <span className="text-[11px] text-slate-400">Total belanja kost</span>
+                  <span className="font-medium text-slate-700">
+                    {formatRupiah(
+                      cashSummary.totalConfirmedOperatingExpensesThisMonth
                     )}
                   </span>
                 </div>

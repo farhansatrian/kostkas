@@ -16,7 +16,8 @@
     "test:m7": "./node_modules/.bin/jiti src/lib/milestone7-reporting-budget-settings.test.ts",
     "test:m8": "./node_modules/.bin/jiti src/lib/milestone8-security-qa.test.ts",
     "test:m10": "./node_modules/.bin/jiti src/lib/milestone10-bootstrap.test.ts",
-    "test:all": "npm run test:db && npm run test:m5 && npm run test:m6 && npm run test:m7 && npm run test:m8 && npm run test:m10",
+    "test:reconciliation": "./node_modules/.bin/jiti src/lib/galon-reconciliation.test.ts",
+    "test:all": "npm run test:db && npm run test:m5 && npm run test:m6 && npm run test:m7 && npm run test:m8 && npm run test:m10 && npm run test:reconciliation",
     "db:backup": "./scripts/db-backup.sh",
     "db:restore": "./scripts/db-restore.sh"
   },

@@ -17,6 +17,16 @@ export interface ContributionActionState {
   message?: string;
 }
 
+function revalidateContributionPaths(): void {
+  revalidatePath("/iuran");
+  revalidatePath("/laporan");
+  revalidatePath("/anggaran");
+  revalidatePath("/pengeluaran");
+  revalidatePath("/reimbursement");
+  revalidatePath("/anggota");
+  revalidatePath("/");
+}
+
 export async function generateRegularChargesAction(
   _prevState: ContributionActionState | undefined,
   formData: FormData
@@ -29,8 +39,7 @@ export async function generateRegularChargesAction(
       period,
     });
 
-    revalidatePath("/iuran");
-    revalidatePath("/");
+    revalidateContributionPaths();
 
     return {
       status: "success",
@@ -67,8 +76,7 @@ export async function createAdditionalChargesAction(
       batchIdempotencyKey,
     });
 
-    revalidatePath("/iuran");
-    revalidatePath("/");
+    revalidateContributionPaths();
 
     return {
       status: "success",
@@ -103,8 +111,7 @@ export async function upsertPolicyAction(
       amountPerMember,
     });
 
-    revalidatePath("/iuran");
-    revalidatePath("/");
+    revalidateContributionPaths();
 
     return {
       status: "success",
@@ -145,9 +152,7 @@ export async function recordPaymentAction(
       note,
     });
 
-    revalidatePath("/iuran");
-    revalidatePath("/anggota");
-    revalidatePath("/");
+    revalidateContributionPaths();
 
     if (result.wasDuplicateRequest) {
       return {
@@ -193,9 +198,7 @@ export async function confirmPendingPaymentAction(
       targetChargeId,
     });
 
-    revalidatePath("/iuran");
-    revalidatePath("/anggota");
-    revalidatePath("/");
+    revalidateContributionPaths();
 
     return {
       status: "success",

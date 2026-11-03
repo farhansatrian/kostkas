@@ -17,6 +17,7 @@ import type {
   ExpensesPageData,
 } from "@/lib/expense-reimbursement-service";
 import { formatRupiah, formatShortDateId } from "@/lib/navigation";
+import { getJakartaTodayIso } from "@/lib/date-utils";
 
 const initialState: ExpenseActionState = { status: "idle" };
 
@@ -181,7 +182,7 @@ export function ExpenseManagement({
     initialState
   );
 
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = getJakartaTodayIso();
   const selectableCategories = data.categories.flatCategories.filter(
     (c) => c.isActive
   );
@@ -734,7 +735,7 @@ export function ExpenseManagement({
                         htmlFor="expense-note"
                         className="block text-xs font-medium text-slate-700 mb-1"
                       >
-                        Catatan
+                        Catatan (Opsional)
                       </label>
                       <input
                         id="expense-note"

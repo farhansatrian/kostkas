@@ -7,17 +7,24 @@ type PrismaClientOrTx =
   | Parameters<Parameters<PrismaClient["$transaction"]>[0]>[0];
 
 /**
- * Kategori pengeluaran default: sengaja dibuat sedikit dan datar (tanpa subkategori)
- * agar pencatatan operasional harian cepat dan tidak membingungkan.
- * Anggota tetap dapat menambah kategori baru dari halaman Pengeluaran bila diperlukan.
+ * Lima kategori pengeluaran default utama KostKas (v1.0.2):
+ * 1. Galon
+ * 2. Listrik
+ * 3. Wi-Fi
+ * 4. Alat Mandi
+ * 5. Lainnya
+ *
+ * Datar tanpa subkategori wajib agar pencatatan operasional harian cepat dan efisien.
  */
-export const DEFAULT_EXPENSE_CATEGORIES = [
-  { slug: "listrik-wifi", name: "Listrik & Wi-Fi" },
-  { slug: "galon-gas", name: "Galon & Gas" },
-  { slug: "kebersihan-dapur", name: "Kebersihan & Dapur" },
-  { slug: "perbaikan", name: "Perbaikan" },
+export const FINAL_DEFAULT_EXPENSE_CATEGORIES = [
+  { slug: "galon", name: "Galon" },
+  { slug: "listrik", name: "Listrik" },
+  { slug: "wifi", name: "Wi-Fi" },
+  { slug: "alat-mandi", name: "Alat Mandi" },
   { slug: "lainnya", name: "Lainnya" },
 ] as const;
+
+export const DEFAULT_EXPENSE_CATEGORIES = FINAL_DEFAULT_EXPENSE_CATEGORIES;
 
 /**
  * Memvalidasi token setup inisialisasi awal secara server-side menggunakan perbandingan constant-time.
@@ -85,11 +92,14 @@ export async function ensureSystemDefaults(
     },
   });
 
-  // 3. Kategori Pengeluaran (datar, tanpa subkategori)
+  // 3. Kategori Pengeluaran (5 kategori default utama)
   for (const category of DEFAULT_EXPENSE_CATEGORIES) {
     await client.expenseCategory.upsert({
       where: { slug: category.slug },
-      update: {},
+      update: {
+        name: category.name,
+        isActive: true,
+      },
       create: {
         slug: category.slug,
         name: category.name,

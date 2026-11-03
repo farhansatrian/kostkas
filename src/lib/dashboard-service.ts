@@ -36,7 +36,8 @@ export interface LiveRecentTransaction {
 export async function getLiveDashboardData(
   db: PrismaClient,
   actor: AuthenticatedActor | null | undefined,
-  now: Date = new Date()
+  now: Date = new Date(),
+  options?: { cashAccountId?: string }
 ) {
   assertAuthenticatedActor(actor);
 
@@ -53,11 +54,16 @@ export async function getLiveDashboardData(
     confirmedPeriodExpensesAgg,
     appPref,
   ] = await Promise.all([
-    db.cashAccount.findFirst({
-      where: { isActive: true },
-      include: { custodianMember: true },
-      orderBy: { createdAt: "asc" },
-    }),
+    options?.cashAccountId
+      ? db.cashAccount.findUnique({
+          where: { id: options.cashAccountId },
+          include: { custodianMember: true },
+        })
+      : db.cashAccount.findFirst({
+          where: { isActive: true },
+          include: { custodianMember: true },
+          orderBy: { createdAt: "asc" },
+        }),
     db.member.findMany({
       where: { leftAt: null },
       orderBy: { joinedAt: "asc" },
@@ -111,20 +117,33 @@ export async function getLiveDashboardData(
   let recentTransactions: LiveRecentTransaction[] = [];
 
   if (cashAccount) {
-    const [ledgerSummary, allConfirmedMovements] = await Promise.all([
-      getCashLedgerSummary(db, cashAccount.id),
-      db.cashMovement.findMany({
-        where: {
-          cashAccountId: cashAccount.id,
-          status: "CONFIRMED",
-        },
-        include: {
-          actorMember: true,
-          payment: { include: { member: true } },
-        },
-        orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
-      }),
-    ]);
+    const [ledgerSummary, allConfirmedMovements, recentMemberAdvances] =
+      await Promise.all([
+        getCashLedgerSummary(db, cashAccount.id),
+        db.cashMovement.findMany({
+          where: {
+            cashAccountId: cashAccount.id,
+            status: "CONFIRMED",
+          },
+          include: {
+            actorMember: true,
+            payment: { include: { member: true } },
+          },
+          orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
+        }),
+        db.expense.findMany({
+          where: {
+            fundingSource: "MEMBER_ADVANCE",
+            status: "CONFIRMED",
+          },
+          include: {
+            advancedByMember: true,
+            category: true,
+          },
+          orderBy: [{ expenseDate: "desc" }, { createdAt: "desc" }],
+          take: 5,
+        }),
+      ]);
 
     actualCashBalance = ledgerSummary.actualBalance;
 
@@ -159,28 +178,51 @@ export async function getLiveDashboardData(
       }
     }
 
-    recentTransactions = allConfirmedMovements.slice(0, 5).map((mov) => {
-      const categoryLabels: Record<string, string> = {
-        OPENING_BALANCE: "Saldo Awal",
-        CONTRIBUTION_PAYMENT: "Iuran Anggota",
-        DIRECT_EXPENSE: "Pengeluaran Kas",
-        REIMBURSEMENT_PAYOUT: "Pelunasan Reimburse",
-        ADJUSTMENT: "Penyesuaian Kas",
-      };
+    const movementItems: { date: Date; item: LiveRecentTransaction }[] =
+      allConfirmedMovements.map((mov) => {
+        const categoryLabels: Record<string, string> = {
+          OPENING_BALANCE: "Saldo Awal",
+          CONTRIBUTION_PAYMENT: "Iuran Anggota",
+          DIRECT_EXPENSE: "Pengeluaran Kas",
+          REIMBURSEMENT_PAYOUT: "Pelunasan Reimburse",
+          ADJUSTMENT: "Penyesuaian Kas",
+        };
 
-      const actorName =
-        mov.payment?.member.name ?? mov.actorMember?.name ?? "Sistem";
+        const actorName =
+          mov.payment?.member.name ?? mov.actorMember?.name ?? "Sistem";
 
-      return {
-        id: mov.id,
-        dateLabel: formatShortDateId(mov.occurredAt),
-        title: stripChargePrefixFromNote(mov.description),
-        categoryLabel: categoryLabels[mov.category] ?? mov.category,
-        actorName,
-        amount: mov.amount,
-        flow: mov.direction,
-      };
-    });
+        return {
+          date: mov.occurredAt,
+          item: {
+            id: mov.id,
+            dateLabel: formatShortDateId(mov.occurredAt),
+            title: stripChargePrefixFromNote(mov.description),
+            categoryLabel: categoryLabels[mov.category] ?? mov.category,
+            actorName,
+            amount: mov.amount,
+            flow: mov.direction,
+          },
+        };
+      });
+
+    const advanceItems: { date: Date; item: LiveRecentTransaction }[] =
+      recentMemberAdvances.map((adv) => ({
+        date: adv.expenseDate,
+        item: {
+          id: adv.id,
+          dateLabel: formatShortDateId(adv.expenseDate),
+          title: `${adv.title} (Talangan)`,
+          categoryLabel: adv.category?.name ?? "Talangan Anggota",
+          actorName: adv.advancedByMember?.name ?? "Anggota",
+          amount: adv.amount,
+          flow: "OUT",
+        },
+      }));
+
+    recentTransactions = [...movementItems, ...advanceItems]
+      .sort((a, b) => b.date.getTime() - a.date.getTime())
+      .slice(0, 5)
+      .map((entry) => entry.item);
   }
 
   const defaultDuePerMember = effectivePolicy?.amountPerMember ?? 150_000;

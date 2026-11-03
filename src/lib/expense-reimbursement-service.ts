@@ -35,18 +35,18 @@ export const CreateExpenseInputSchema = z
     title: z
       .string()
       .trim()
-      .min(3, "Deskripsi pengeluaran minimal 3 karakter.")
-      .max(120, "Deskripsi pengeluaran maksimal 120 karakter."),
+      .min(2, "Nama/judul pengeluaran minimal 2 karakter.")
+      .max(120, "Nama/judul pengeluaran maksimal 120 karakter."),
     amount: z.coerce
       .number()
-      .int("Nominal pengeluaran harus bilangan bulat Rupiah.")
-      .positive("Nominal pengeluaran harus lebih dari Rp0.")
-      .max(100_000_000, "Nominal pengeluaran terlalu besar."),
+      .int("Nominal pengeluaran harus bilangan bulat Rupiah tanpa desimal.")
+      .positive("Nominal pengeluaran harus lebih besar dari Rp0.")
+      .max(100_000_000, "Nominal pengeluaran maksimal Rp100.000.000."),
     categoryId: z.string().uuid("Pilih kategori pengeluaran yang valid."),
     fundingSource: z.enum(["DIRECT_CASH", "MEMBER_ADVANCE"]),
     advancedByMemberId: z
       .string()
-      .uuid("Pilih anggota penanggung dana talangan yang valid.")
+      .uuid("Pilih anggota yang menalangi pembayaran.")
       .optional()
       .nullable(),
     confirmImmediately: z.boolean().default(true),
@@ -58,7 +58,9 @@ export const CreateExpenseInputSchema = z
       .string()
       .trim()
       .max(200, "Catatan tambahan maksimal 200 karakter.")
-      .optional(),
+      .optional()
+      .nullable()
+      .transform((val) => (val && val.length > 0 ? val : null)),
   })
   .superRefine((val, ctx) => {
     if (val.fundingSource === "MEMBER_ADVANCE" && !val.advancedByMemberId) {
@@ -130,7 +132,11 @@ function parseDateInput(raw: Date | string | undefined, fallback = new Date()): 
     }
     return raw;
   }
-  const parsed = new Date(raw.includes("T") ? raw : `${raw}T12:00:00.000Z`);
+  // Pasangkan offset +07:00 (WIB) untuk input tanggal YYYY-MM-DD murni
+  // agar konsisten dengan zona waktu operasional Jakarta (05:00 UTC = 12:00 WIB)
+  const isDateOnly = /^\d{4}-\d{2}-\d{2}$/.test(raw.trim());
+  const dateStr = isDateOnly ? `${raw.trim()}T12:00:00.000+07:00` : raw;
+  const parsed = new Date(dateStr);
   if (Number.isNaN(parsed.getTime())) {
     throw new Error("Format tanggal transaksi tidak valid.");
   }
@@ -223,7 +229,7 @@ export async function authorizedCreateExpense(
       allowNegativeBalance: data.allowNegativeBalance,
       recordedByMemberId: validActor.memberId,
       expenseDate,
-      note: data.note,
+      note: data.note ?? undefined,
     });
     return {
       expense: res.expense,
@@ -252,7 +258,7 @@ export async function authorizedCreateExpense(
       idempotencyKey: data.idempotencyKey,
       recordedByMemberId: validActor.memberId,
       expenseDate,
-      note: data.note,
+      note: data.note ?? undefined,
     });
     return {
       expense: res.expense,
@@ -270,7 +276,7 @@ export async function authorizedCreateExpense(
     idempotencyKey: data.idempotencyKey,
     recordedByMemberId: validActor.memberId,
     expenseDate,
-    note: data.note,
+    note: data.note ?? undefined,
   });
   return {
     expense: res.expense,

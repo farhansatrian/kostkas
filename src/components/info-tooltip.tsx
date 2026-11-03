@@ -59,37 +59,47 @@ export function InfoTooltip({
 
   const updatePosition = useCallback(() => {
     if (!buttonRef.current) return;
-    const rect = buttonRef.current.getBoundingClientRect();
+    const triggerRect = buttonRef.current.getBoundingClientRect();
 
     const screenWidth = window.innerWidth;
     const screenHeight = window.innerHeight;
     const tooltipWidth = Math.min(300, screenWidth - 24);
+    const measuredHeight = tooltipRef.current?.offsetHeight ?? 160;
 
-    // Hitung posisi horizontal (tengah di atas trigger, dibatasi tepi layar)
-    let left = rect.left + rect.width / 2 - tooltipWidth / 2;
+    // Hitung posisi horizontal (tengah di atas/bawah trigger, dibatasi tepi layar)
+    let left = triggerRect.left + triggerRect.width / 2 - tooltipWidth / 2;
     left = Math.max(12, Math.min(left, screenWidth - tooltipWidth - 12));
 
-    // Cek ketersediaan ruang vertikal (apakah muat di atas trigger?)
-    // Jika terlalu dekat dengan tepi atas layar (< 130px), otomatis pindah ke bawah
-    const preferTop = side === "top";
-    const fitsTop = rect.top >= 130;
-    const fitsBottom = screenHeight - rect.bottom >= 130;
+    const spaceAbove = triggerRect.top;
+    const spaceBelow = screenHeight - triggerRect.bottom;
 
+    // Tentukan penempatan vertikal (top vs bottom) secara adaptif
     let placedOn: "top" | "bottom";
-    let top = 0;
-
-    if (preferTop && fitsTop) {
-      placedOn = "top";
-      top = rect.top - 8;
-    } else if (fitsBottom) {
-      placedOn = "bottom";
-      top = rect.bottom + 8;
-    } else if (fitsTop) {
-      placedOn = "top";
-      top = rect.top - 8;
+    if (side === "bottom") {
+      placedOn =
+        spaceBelow >= measuredHeight + 12 || spaceBelow >= spaceAbove
+          ? "bottom"
+          : "top";
     } else {
-      placedOn = "bottom";
-      top = rect.bottom + 8;
+      // Jika memilih "top", pastikan ruang atas benar-benar cukup dan tidak terpotong
+      if (spaceAbove >= measuredHeight + 16) {
+        placedOn = "top";
+      } else if (spaceBelow >= measuredHeight + 16) {
+        placedOn = "bottom";
+      } else {
+        placedOn = spaceBelow >= spaceAbove ? "bottom" : "top";
+      }
+    }
+
+    // Hitung koordinat top absolut viewport tanpa translateY agar anti-clipping
+    let top: number;
+    if (placedOn === "top") {
+      top = triggerRect.top - 8 - measuredHeight;
+      top = Math.max(12, top);
+    } else {
+      top = triggerRect.bottom + 8;
+      top = Math.min(top, screenHeight - measuredHeight - 12);
+      top = Math.max(12, top);
     }
 
     setCoords({ top, left, placedOn, width: tooltipWidth });
@@ -112,9 +122,14 @@ export function InfoTooltip({
     }, 120);
   }, []);
 
-  // Update posisi saat scroll atau resize layar
+  // Update dan ukur ulang posisi secara akurat setelah tooltip mount di DOM
   useEffect(() => {
     if (!isOpen) return;
+
+    // Ukur ulang setelah render awal untuk mendapatkan tinggi aktual dari DOM
+    const frameId = requestAnimationFrame(() => {
+      updatePosition();
+    });
 
     function handleScrollOrResize() {
       updatePosition();
@@ -144,6 +159,7 @@ export function InfoTooltip({
     document.addEventListener("keydown", handleKeyDown);
 
     return () => {
+      cancelAnimationFrame(frameId);
       window.removeEventListener("scroll", handleScrollOrResize);
       window.removeEventListener("resize", handleScrollOrResize);
       document.removeEventListener("mousedown", handlePointerDown);
@@ -199,10 +215,8 @@ export function InfoTooltip({
               top: `${coords.top}px`,
               left: `${coords.left}px`,
               width: `${coords.width}px`,
-              transform:
-                coords.placedOn === "top"
-                  ? "translateY(-100%)"
-                  : "translateY(0)",
+              maxHeight: "calc(100vh - 24px)",
+              overflowY: "auto",
             }}
             className="z-[9999] p-3 text-xs rounded-xl bg-slate-900 text-slate-100 shadow-2xl shadow-slate-950/40 border border-slate-800 pointer-events-auto select-text font-normal leading-relaxed text-left animate-in fade-in zoom-in-95 duration-100"
           >

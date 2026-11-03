@@ -533,12 +533,30 @@ export async function getBudgetPageData(
       pInclusivePrevious
     );
 
-    categoryGroups.push({
-      parent: parentItem,
-      subcategories: subItems,
-    });
+    // Tampilkan grup kategori jika aktif, atau memiliki alokasi anggaran/realisasi historis
+    const visibleSubItems = subItems.filter(
+      (s) =>
+        s.isActive ||
+        s.effectiveBudgetAmount > 0 ||
+        s.inclusiveRealizedAmount > 0 ||
+        s.previousRealizedAmount > 0
+    );
 
-    flatCategories.push(parentItem, ...subItems);
+    const isGroupRelevant =
+      parent.isActive ||
+      pEffectiveBudget > 0 ||
+      pInclusiveRealized > 0 ||
+      pInclusivePrevious > 0 ||
+      visibleSubItems.length > 0;
+
+    if (isGroupRelevant) {
+      categoryGroups.push({
+        parent: parentItem,
+        subcategories: visibleSubItems,
+      });
+
+      flatCategories.push(parentItem, ...visibleSubItems);
+    }
   }
 
   const configuredTotalAmount = monthlyBudgetRecord?.totalAmount ?? 0;

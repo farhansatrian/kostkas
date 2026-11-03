@@ -305,3 +305,121 @@ export async function deleteUnusedExpenseCategory(
   });
 }
 
+export interface CategorySyncSummary {
+  ensuredFinalCategories: string[];
+  deactivatedUnusedLegacy: string[];
+  preservedUsedLegacy: string[];
+}
+
+/**
+ * Prosedur sinkronisasi non-destruktif struktur kategori KostKas (v1.0.2):
+ * 1. Menjamin ketersediaan 5 kategori default aktif: Galon, Listrik, Wi-Fi, Alat Mandi, Lainnya.
+ * 2. Kategori legacy (Galon & Gas, Listrik & Wi-Fi, Kebersihan & Dapur, Perbaikan, dsb):
+ *    - Jika memiliki transaksi/alokasi historis: tetap dipertahankan utuh dan dinonaktifkan (isActive: false)
+ *      agar pelaporan historis akurat namun tidak dapat dipilih untuk transaksi baru.
+ *    - Jika belum pernah dipakai: dinonaktifkan secara aman.
+ * 3. Idempotent dan transactional.
+ */
+export async function syncExpenseCategoriesNonDestructive(
+  db: PrismaClient
+): Promise<CategorySyncSummary> {
+  const ensuredFinalCategories: string[] = [];
+  const deactivatedUnusedLegacy: string[] = [];
+  const preservedUsedLegacy: string[] = [];
+
+  const FINAL_CATEGORIES = [
+    { slug: "galon", name: "Galon" },
+    { slug: "listrik", name: "Listrik" },
+    { slug: "wifi", name: "Wi-Fi" },
+    { slug: "alat-mandi", name: "Alat Mandi" },
+    { slug: "lainnya", name: "Lainnya" },
+  ];
+
+  const LEGACY_SLUGS = [
+    "galon-gas",
+    "listrik-wifi",
+    "kebersihan-dapur",
+    "perbaikan",
+    "tagihan-utilitas",
+    "konsumsi-bersama",
+    "kebersihan",
+    "perawatan",
+    "token-listrik",
+    "air-galon",
+    "kebutuhan-dapur",
+    "kebersihan-kamar-mandi",
+  ];
+
+  await db.$transaction(async (tx) => {
+    // 1. Pastikan 5 kategori final aktif
+    for (const target of FINAL_CATEGORIES) {
+      const existing = await tx.expenseCategory.findUnique({
+        where: { slug: target.slug },
+      });
+
+      if (existing) {
+        await tx.expenseCategory.update({
+          where: { id: existing.id },
+          data: {
+            name: target.name,
+            isActive: true,
+            parentId: null,
+          },
+        });
+        ensuredFinalCategories.push(target.name);
+      } else {
+        await tx.expenseCategory.create({
+          data: {
+            slug: target.slug,
+            name: target.name,
+            isActive: true,
+            parentId: null,
+          },
+        });
+        ensuredFinalCategories.push(target.name);
+      }
+    }
+
+    // 2. Periksa dan nonaktifkan kategori legacy tanpa merusak data historis
+    const legacyCategories = await tx.expenseCategory.findMany({
+      where: {
+        slug: { in: LEGACY_SLUGS },
+      },
+      include: {
+        _count: {
+          select: {
+            expenses: true,
+            budgetAllocations: true,
+          },
+        },
+      },
+    });
+
+    for (const leg of legacyCategories) {
+      const hasUsage =
+        leg._count.expenses > 0 || leg._count.budgetAllocations > 0;
+      if (leg.isActive) {
+        await tx.expenseCategory.update({
+          where: { id: leg.id },
+          data: { isActive: false },
+        });
+      }
+
+      if (hasUsage) {
+        preservedUsedLegacy.push(
+          `${leg.name} [${leg.slug}] (${leg._count.expenses} transaksi, ${leg._count.budgetAllocations} pagu)`
+        );
+      } else {
+        deactivatedUnusedLegacy.push(`${leg.name} [${leg.slug}]`);
+      }
+    }
+  });
+
+  return {
+    ensuredFinalCategories,
+    deactivatedUnusedLegacy,
+    preservedUsedLegacy,
+  };
+}
+
+

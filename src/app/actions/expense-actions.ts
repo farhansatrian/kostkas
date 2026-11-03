@@ -25,7 +25,10 @@ export interface ExpenseActionState {
 
 function revalidateFinancePaths(): void {
   revalidatePath("/pengeluaran");
+  revalidatePath("/anggaran");
+  revalidatePath("/laporan");
   revalidatePath("/reimbursement");
+  revalidatePath("/iuran");
   revalidatePath("/");
 }
 
