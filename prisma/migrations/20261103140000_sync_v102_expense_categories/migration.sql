@@ -1,6 +1,8 @@
 -- Migration: 20261103140000_sync_v102_expense_categories
 -- Tujuan: Sinkronisasi non-destruktif 5 kategori default KostKas v1.0.2 dan penonaktifan kategori legacy
--- Sifat: Data-only, idempotent sejati, zero data loss (mempertahankan seluruh foreign key & transaksi historis)
+-- Sifat: Data-only, transaksi PostgreSQL eksplisit (BEGIN/COMMIT), idempotent sejati, zero data loss
+
+BEGIN;
 
 -- 1. Pastikan 5 kategori operasional final aktif di tingkat root.
 --    Jika kategori sudah ada:
@@ -86,3 +88,5 @@ WHERE "slug" IN (
     'kebersihan-kamar-mandi'
 )
 AND "isActive" = true;
+
+COMMIT;

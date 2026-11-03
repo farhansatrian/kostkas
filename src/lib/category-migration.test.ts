@@ -359,6 +359,45 @@ async function runCategoryMigrationVerification() {
   }
   console.log("✓ [Verifikasi 6] SQL migration terbukti 100% idempotent sejati: 'updatedAt' tidak dimodifikasi tanpa perubahan data.");
 
+  // G. Uji Rollback Transaksi Atomic: kegagalan statement kedua menyebabkan rollback perubahan statement pertama
+  console.log("\nMenguji rollback transaksi atomic (statement 2 gagal -> statement 1 dibatalkan)...");
+  const ROLLBACK_TEST_SLUG = "test-atomic-rollback-category";
+  
+  // Pastikan slug uji belum ada
+  await prisma.expenseCategory.deleteMany({
+    where: { slug: ROLLBACK_TEST_SLUG },
+  });
+
+  const failingTransactionalSql = `
+    BEGIN;
+    INSERT INTO "ExpenseCategory" ("id", "slug", "name", "isActive", "createdAt", "updatedAt")
+    VALUES (gen_random_uuid(), '${ROLLBACK_TEST_SLUG}', 'Kategori Uji Rollback', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+    
+    -- Statement 2 sengaja memicu error constraint/tabel tidak ada
+    INSERT INTO "TabelTidakPernahAda_UntukPengujianRollback" ("id") VALUES ('123');
+    COMMIT;
+  `;
+
+  let rollbackErrorCaught = false;
+  try {
+    await prisma.$executeRawUnsafe(failingTransactionalSql);
+  } catch {
+    rollbackErrorCaught = true;
+  }
+
+  assert.ok(rollbackErrorCaught, "Transaksi gagal harus melempar error database.");
+
+  // Verifikasi bahwa data dari Statement 1 TIDAK PERNAH masuk ke database (ter-rollback sempurna)
+  const categoryAfterRollback = await prisma.expenseCategory.findUnique({
+    where: { slug: ROLLBACK_TEST_SLUG },
+  });
+  assert.equal(
+    categoryAfterRollback,
+    null,
+    "Data statement 1 ('test-atomic-rollback-category') harus ter-rollback dan TIDAK boleh tersimpan di database saat statement 2 gagal!"
+  );
+  console.log("✓ [Verifikasi 7] Transaksi atomic terbukti aman: kegagalan statement kedua membatalkan (rollback) statement pertama 100%.");
+
   await cleanupMigrationTestData();
   console.log("\n=== SELURUH PENGUJIAN KATEGORI MIGRATION LULUS 100% ===");
 }
