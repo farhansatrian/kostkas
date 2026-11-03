@@ -814,7 +814,7 @@ export async function getSettingsPageData(
 
   return {
     preferences: {
-      kostName: appPref?.kostName ?? "KostKas Bersama",
+      kostName: appPref?.kostName ?? "KostKas",
       currencyCode: appPref?.currencyCode ?? "IDR",
       timezone: appPref?.timezone ?? JAKARTA_TIMEZONE,
       dateFormat: appPref?.dateFormat ?? "dd MMM yyyy",

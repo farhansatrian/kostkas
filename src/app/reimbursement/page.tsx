@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
+import { InfoTooltip } from "@/components/info-tooltip";
 import { ReimbursementManagement } from "@/components/reimbursement-management";
 import { getKostAppPreferences } from "@/lib/app-preferences";
 import { getReimbursementsPageData } from "@/lib/expense-reimbursement-service";
@@ -43,11 +44,18 @@ async function ReimbursementsContent({
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-10 py-6 sm:py-10 space-y-8">
         <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-2">
           <div>
-            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-slate-900">
-              Reimbursement & Talangan Anggota
-            </h1>
+            <div className="flex items-center gap-1.5">
+              <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-slate-900">
+                Reimbursement & Talangan
+              </h1>
+              <InfoTooltip
+                title="Apa itu Reimbursement?"
+                content="Klaim pengembalian dana untuk belanja kost yang ditalangi terlebih dahulu memakai uang pribadi anggota. Setelah dicairkan dari kas DANA, saldo kas berkurang dan kewajiban kas selesai."
+                label="Info reimbursement"
+              />
+            </div>
             <p className="text-sm text-slate-600 mt-0.5">
-              Pelacakan utang talangan anggota serta pencairan dana penuh maupun parsial dari kas DANA.
+              Pelacakan talangan anggota serta pencairan dana dari kas DANA.
             </p>
           </div>
 
@@ -55,7 +63,7 @@ async function ReimbursementsContent({
             href="/pengeluaran"
             className="inline-flex items-center self-start sm:self-auto rounded-lg border border-slate-200/80 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
           >
-            Catat pengeluaran / talangan baru
+            Catat pengeluaran baru &rarr;
           </Link>
         </div>
 

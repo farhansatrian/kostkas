@@ -1,4 +1,10 @@
-import "dotenv/config";
+// In production container environment variables are injected directly; in dev dotenv is loaded if present
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require("dotenv/config");
+} catch {
+  // no-op if dotenv is not present
+}
 import { defineConfig } from "prisma/config";
 
 export default defineConfig({

@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { prisma } from "../src/lib/prisma";
 import { upsertMemberAccountCredentials } from "../src/lib/auth";
+import { DEFAULT_EXPENSE_CATEGORIES } from "../src/lib/bootstrap-service";
 
 const SEED_MEMBERS = [
   {
@@ -20,57 +21,6 @@ const SEED_MEMBERS = [
     name: "Alzha",
     username: "alzha",
     joinedAt: new Date("2026-10-01T00:00:00.000Z"),
-  },
-] as const;
-
-const SEED_PARENT_CATEGORIES = [
-  {
-    slug: "tagihan-utilitas",
-    name: "Tagihan & Utilitas",
-  },
-  {
-    slug: "konsumsi-bersama",
-    name: "Konsumsi Bersama",
-  },
-  {
-    slug: "kebersihan",
-    name: "Kebersihan & Perlengkapan",
-  },
-  {
-    slug: "perawatan",
-    name: "Perawatan & Perbaikan",
-  },
-  {
-    slug: "lainnya",
-    name: "Lainnya",
-  },
-] as const;
-
-const SEED_SUBCATEGORIES = [
-  {
-    slug: "wifi",
-    name: "Wi-Fi",
-    parentSlug: "tagihan-utilitas",
-  },
-  {
-    slug: "token-listrik",
-    name: "Token Listrik",
-    parentSlug: "tagihan-utilitas",
-  },
-  {
-    slug: "air-galon",
-    name: "Air Galon",
-    parentSlug: "konsumsi-bersama",
-  },
-  {
-    slug: "kebutuhan-dapur",
-    name: "Kebutuhan Dapur",
-    parentSlug: "konsumsi-bersama",
-  },
-  {
-    slug: "kebersihan-kamar-mandi",
-    name: "Sabun & Pembersih Kamar Mandi",
-    parentSlug: "kebersihan",
   },
 ] as const;
 
@@ -117,14 +67,14 @@ async function main(): Promise<void> {
   const cashAccount = await prisma.cashAccount.upsert({
     where: { code: "DANA_KAS_KOST" },
     update: {
-      name: "DANA Kas Kost (Simulasi)",
+      name: "DANA Kas Kost",
       provider: "DANA",
       custodianMemberId: farhanId,
       isActive: true,
     },
     create: {
       code: "DANA_KAS_KOST",
-      name: "DANA Kas Kost (Simulasi)",
+      name: "DANA Kas Kost",
       provider: "DANA",
       custodianMemberId: farhanId,
       isActive: true,
@@ -151,10 +101,9 @@ async function main(): Promise<void> {
     },
   });
 
-  // 4. Upsert Kategori Pengeluaran Utama
-  const categoryMap = new Map<string, string>();
-  for (const cat of SEED_PARENT_CATEGORIES) {
-    const saved = await prisma.expenseCategory.upsert({
+  // 4. Upsert Kategori Pengeluaran harian (datar, tanpa subkategori)
+  for (const cat of DEFAULT_EXPENSE_CATEGORIES) {
+    await prisma.expenseCategory.upsert({
       where: { slug: cat.slug },
       update: {
         name: cat.name,
@@ -168,35 +117,15 @@ async function main(): Promise<void> {
         isActive: true,
       },
     });
-    categoryMap.set(cat.slug, saved.id);
   }
 
-  // 5. Upsert Subkategori Dinamis
-  for (const sub of SEED_SUBCATEGORIES) {
-    const parentId = categoryMap.get(sub.parentSlug) ?? null;
-    await prisma.expenseCategory.upsert({
-      where: { slug: sub.slug },
-      update: {
-        name: sub.name,
-        parentId,
-        isActive: true,
-      },
-      create: {
-        slug: sub.slug,
-        name: sub.name,
-        parentId,
-        isActive: true,
-      },
-    });
-  }
-
-  // 6. Upsert Preferensi Aplikasi Default
+  // 5. Upsert Preferensi Aplikasi Default
   await prisma.appPreference.upsert({
     where: { id: "default" },
     update: {},
     create: {
       id: "default",
-      kostName: "KostKas Bersama",
+      kostName: "KostKas",
       currencyCode: "IDR",
       timezone: "Asia/Jakarta",
       dateFormat: "dd MMM yyyy",

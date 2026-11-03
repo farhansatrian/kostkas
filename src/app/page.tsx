@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
+import { InfoTooltip } from "@/components/info-tooltip";
 import { getLiveDashboardData } from "@/lib/dashboard-service";
 import { formatRupiah } from "@/lib/navigation";
 import { prisma } from "@/lib/prisma";
@@ -68,10 +69,17 @@ async function DashboardContent() {
           {/* 1. Focal Point Utama: Total Saldo Kas DANA */}
           <div className="p-5 sm:p-7 border-b border-slate-200/80 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
             <div>
-              <p className="text-xs font-medium text-slate-500">
-                Total saldo kas {config.cashAccountProvider} (
-                {config.cashAccountHolder})
-              </p>
+              <div className="flex items-center gap-1.5">
+                <p className="text-xs font-medium text-slate-500">
+                  Total saldo kas {config.cashAccountProvider} (
+                  {config.cashAccountHolder})
+                </p>
+                <InfoTooltip
+                  title="Saldo Kas Riil DANA"
+                  content={`Uang fisik bersama yang saat ini tersimpan di dompet digital ${config.cashAccountProvider} atas nama ${config.cashAccountHolder}. Bukan target iuran, melainkan saldo nyata yang siap dipakai.`}
+                  label="Info saldo kas riil"
+                />
+              </div>
               <p className="mt-2 text-3xl sm:text-4xl font-semibold tracking-tight text-slate-900 tabular-nums">
                 {formatRupiah(cashSummary.actualCashBalance)}
               </p>
@@ -105,9 +113,16 @@ async function DashboardContent() {
             {/* 2. Ringkasan Iuran Diterima Bulan Ini */}
             <div className="p-5 sm:p-6 flex flex-col justify-between gap-4">
               <div>
-                <dt className="text-xs font-medium text-slate-500">
-                  Iuran diterima bulan ini
-                </dt>
+                <div className="flex items-center justify-between">
+                  <dt className="text-xs font-medium text-slate-500">
+                    Iuran diterima bulan ini
+                  </dt>
+                  <InfoTooltip
+                    title="Iuran Diterima"
+                    content="Total uang iuran dari para anggota yang sudah ditransfer dan terkonfirmasi masuk ke rekening kas DANA pada bulan ini."
+                    label="Info iuran diterima"
+                  />
+                </div>
                 <dd className="mt-1.5 text-xl sm:text-2xl font-semibold tracking-tight text-slate-900 tabular-nums">
                   {formatRupiah(cashSummary.collectedDuesThisMonth)}
                 </dd>
@@ -141,9 +156,16 @@ async function DashboardContent() {
             {/* 3. Total Arus Kas Keluar Bulan Ini */}
             <div className="p-5 sm:p-6 flex flex-col justify-between gap-4">
               <div>
-                <dt className="text-xs font-medium text-slate-500">
-                  Total kas keluar bulan ini
-                </dt>
+                <div className="flex items-center justify-between">
+                  <dt className="text-xs font-medium text-slate-500">
+                    Total kas keluar bulan ini
+                  </dt>
+                  <InfoTooltip
+                    title="Arus Kas Keluar"
+                    content="Semua pengeluaran riil yang mengurangi saldo akun DANA, baik untuk belanja operasional langsung maupun pencairan reimbursement dana talangan."
+                    label="Info kas keluar"
+                  />
+                </div>
                 <dd className="mt-1.5 text-xl sm:text-2xl font-semibold tracking-tight text-slate-900 tabular-nums">
                   {formatRupiah(cashSummary.totalCashOutflowThisMonth)}
                 </dd>
@@ -170,9 +192,16 @@ async function DashboardContent() {
             {/* 4. Total Reimbursement yang Masih Terutang */}
             <div className="p-5 sm:p-6 flex flex-col justify-between gap-4">
               <div>
-                <dt className="text-xs font-medium text-slate-500">
-                  Reimbursement terutang
-                </dt>
+                <div className="flex items-center justify-between">
+                  <dt className="text-xs font-medium text-slate-500">
+                    Reimbursement terutang
+                  </dt>
+                  <InfoTooltip
+                    title="Reimbursement Terutang"
+                    content="Pengeluaran bersama yang ditalangi lebih dahulu memakai uang pribadi anggota, dan saat ini sedang menunggu pencairan kembali dari kas kost."
+                    label="Info reimbursement terutang"
+                  />
+                </div>
                 <dd className="mt-1.5 text-xl sm:text-2xl font-semibold tracking-tight text-slate-900 tabular-nums">
                   {formatRupiah(cashSummary.pendingReimbursementTotal)}
                 </dd>
@@ -290,8 +319,8 @@ async function DashboardContent() {
 
             {data.recentTransactions.length === 0 ? (
               <div className="py-6 text-xs text-slate-500">
-                Belum ada mutasi kas terkonfirmasi di buku besar PostgreSQL.
-                Catat pembayaran iuran melalui halaman{" "}
+                Belum ada mutasi kas terkonfirmasi. Catat pembayaran iuran
+                melalui halaman{" "}
                 <Link
                   href="/iuran"
                   className="font-medium text-teal-800 underline underline-offset-2"

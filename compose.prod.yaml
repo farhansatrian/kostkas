@@ -1,0 +1,115 @@
+# =============================================================================
+# KostKas — Docker Compose Production Stack (compose.prod.yaml)
+# =============================================================================
+# Target Host: Alpine Linux VM "kebonkacang" (2 vCPU, 952 MB RAM, 10 GB Disk)
+# IP Privat VM: 10.211.84.117 | Domain: vm-kebonkacang.supercomfy.dev
+# Port Forwarding Gateway Dashboard: 3000
+#
+# Prinsip Keamanan & Efisiensi:
+# 1. Zero DB Exposure: PostgreSQL TIDAK dipublikasikan ke host / internet.
+# 2. Prebuilt GHCR Image: Menggunakan image prebuilt dari GHCR via KOSTKAS_IMAGE
+#    agar tidak membebani kompilasi build pada VM dengan RAM 1 GB (952 MB).
+# 3. Host Port Binding: Aplikasi Next.js di-binding ke ${APP_BIND_IP:-0.0.0.0}:3000
+#    agar gateway/dashboard dapat meneruskan trafik ke IP privat 10.211.84.117:3000.
+# 4. Resource Caps (1 GB RAM): Total batas RAM app (448M) + db (256M) = 704M.
+#    Menyisakan ~248M untuk Alpine OS dan kernel buffer agar terhindar dari OOM Killer.
+# 5. Log Rotation (10 GB Disk): Batas log JSON 10MB x 3 berkas mencegah kepenuhan disk.
+# =============================================================================
+
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: kostkas-prod-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Wajib diatur di .env.production}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Wajib diatur di .env.production}
+      POSTGRES_DB: ${POSTGRES_DB:?Wajib diatur di .env.production}
+    # Parameter PostgreSQL disetel khusus untuk lingkungan 1 GB RAM host
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_buffers=64MB"
+      - "-c"
+      - "effective_cache_size=128MB"
+      - "-c"
+      - "work_mem=4MB"
+      - "-c"
+      - "maintenance_work_mem=16MB"
+      - "-c"
+      - "max_connections=25"
+      - "-c"
+      - "checkpoint_completion_target=0.9"
+      - "-c"
+      - "wal_buffers=4MB"
+    # Port PostgreSQL SENGAJA TIDAK diekspos ke host / internet publik
+    volumes:
+      - kostkas_prod_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 256M
+        reservations:
+          memory: 96M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - kostkas-prod-net
+
+  app:
+    image: ${KOSTKAS_IMAGE:-ghcr.io/farhansatrian/kostkas:latest}
+    container_name: kostkas-prod-app
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      HOSTNAME: "0.0.0.0"
+      NODE_OPTIONS: "--max-old-space-size=320"
+      NEXT_TELEMETRY_DISABLED: "1"
+      NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-KostKas}
+      NEXT_PUBLIC_APP_ENV: production
+      NEXT_PUBLIC_DEFAULT_MONTHLY_DUE: ${NEXT_PUBLIC_DEFAULT_MONTHLY_DUE:-150000}
+      DATABASE_URL: ${DATABASE_URL:?Wajib diatur di .env.production}
+      AUTH_SECRET: ${AUTH_SECRET:?Wajib diatur di .env.production}
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-true}
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      INITIAL_SETUP_TOKEN: ${INITIAL_SETUP_TOKEN:-}
+    # Binding port host: default ke 0.0.0.0:3000 agar dapat diakses oleh gateway
+    # dashboard VM pada IP privat 10.211.84.117:3000
+    ports:
+      - "${APP_BIND_IP:-0.0.0.0}:3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: "1.5"
+          memory: 448M
+        reservations:
+          memory: 180M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - kostkas-prod-net
+
+networks:
+  kostkas-prod-net:
+    driver: bridge
+
+volumes:
+  kostkas_prod_pgdata:
+    name: kostkas_prod_pgdata

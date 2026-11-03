@@ -1,0 +1,62 @@
+# =============================================================================
+# KostKas — Contoh Konfigurasi Caddy Reverse Proxy (Caddyfile)
+# =============================================================================
+# Caddy adalah web server modern yang secara otomatis mengelola sertifikat
+# TLS/HTTPS gratis (Let's Encrypt / ZeroSSL) tanpa perlu cron manual.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# OPSI A: Akses Khusus Jaringan Lokal Kost (Local Area Network Only)
+# -----------------------------------------------------------------------------
+# Cocok jika server VM hanya diakses oleh perangkat yang terhubung ke Wi-Fi kost.
+# Menggunakan HTTPS dengan sertifikat internal lokal Caddy (Local CA).
+# Ganti 'kas.kost.local' dengan hostname lokal atau IP lokal VM (contoh: 192.168.1.50).
+# -----------------------------------------------------------------------------
+# kas.kost.local {
+#     tls internal
+#     reverse_proxy 127.0.0.1:3000
+# }
+
+# -----------------------------------------------------------------------------
+# OPSI B: Akses Privat Melalui Mesh VPN (Tailscale / WireGuard) [SANGAT DIREKOMENDASIKAN]
+# -----------------------------------------------------------------------------
+# Sangat aman untuk kost: Server TIDAK membuka port ke internet publik sama sekali.
+# Seluruh anggota kost bergabung ke Tailscale Tailnet pribadi kost.
+# Menggunakan domain MagicDNS Tailscale dengan sertifikat otomatis Let's Encrypt.
+# -----------------------------------------------------------------------------
+# kas-kost.tailnet-name.ts.net {
+#     reverse_proxy 127.0.0.1:3000
+# }
+
+# -----------------------------------------------------------------------------
+# OPSI C: Akses Internet Publik Melalui Domain Publik & HTTPS Otomatis
+# -----------------------------------------------------------------------------
+# Cocok jika kost memiliki IP Publik Statis / DDNS dan Port Forwarding (80/443),
+# atau menggunakan Cloudflare Tunnel. Caddy otomatis menerbitkan sertifikat TLS.
+# -----------------------------------------------------------------------------
+kas.namakost.com {
+    # Forward seluruh trafik ke aplikasi KostKas di port lokal 3000
+    reverse_proxy 127.0.0.1:3000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    # Header keamanan tambahan level reverse proxy
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+
+    # Log akses dalam format JSON untuk analisis audit
+    log {
+        output file /var/log/caddy/kostkas_access.log {
+            roll_size 10mb
+            roll_keep 5
+        }
+    }
+}
+

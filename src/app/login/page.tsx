@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
+import { BootstrapAccountForm } from "@/components/bootstrap-account-form";
 import { LoginForm } from "@/components/login-form";
 import { prisma } from "@/lib/prisma";
 import { getCurrentActor } from "@/lib/session";
@@ -23,6 +24,8 @@ async function LoginContent() {
     orderBy: { member: { joinedAt: "asc" } },
   });
 
+  const isInitialSetup = activeAccounts.length === 0;
+
   return (
     <div className="w-full max-w-sm mx-auto space-y-6">
       <div className="space-y-1.5">
@@ -36,19 +39,20 @@ async function LoginContent() {
           </span>
         </div>
         <h1 className="text-xl font-semibold tracking-tight text-slate-900">
-          Masuk ke Buku Kas Kost
+          {isInitialSetup ? "Inisialisasi Sistem KostKas" : "Masuk ke Buku Kas Kost"}
         </h1>
         <p className="text-xs text-slate-600">
-          Seluruh penghuni aktif memiliki akses setara untuk mencatat dan
-          memantau kas bersama.
+          {isInitialSetup
+            ? "Belum ada akun penghuni terdaftar. Buat akun pertama untuk mulai mengelola kas kost."
+            : "Seluruh penghuni aktif memiliki akses setara untuk mencatat dan memantau kas bersama."}
         </p>
       </div>
 
       <section
-        aria-label="Formulir masuk"
+        aria-label={isInitialSetup ? "Formulir inisialisasi akun pertama" : "Formulir masuk"}
         className="rounded-xl bg-white border border-slate-200/80 p-5 sm:p-6"
       >
-        <LoginForm />
+        {isInitialSetup ? <BootstrapAccountForm /> : <LoginForm />}
       </section>
 
       {activeAccounts.length > 0 && (

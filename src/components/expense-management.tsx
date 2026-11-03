@@ -182,6 +182,9 @@ export function ExpenseManagement({
   );
 
   const todayIso = new Date().toISOString().slice(0, 10);
+  const selectableCategories = data.categories.flatCategories.filter(
+    (c) => c.isActive
+  );
 
   return (
     <div className="space-y-8 sm:space-y-10">
@@ -547,7 +550,7 @@ export function ExpenseManagement({
 
         {/* Right 5 Cols: Add Expense Form + Category Management + Ledger Adjustment */}
         <div className="lg:col-span-5 space-y-6">
-          {/* 1. Form Catat Pengeluaran Baru */}
+          {/* 1. Form Catat Pengeluaran (dibuat sesingkat mungkin untuk input harian) */}
           <section
             aria-labelledby="add-expense-heading"
             className="rounded-xl bg-white border border-slate-200/80 p-5 sm:p-6 space-y-4"
@@ -557,104 +560,73 @@ export function ExpenseManagement({
                 id="add-expense-heading"
                 className="text-sm font-semibold text-slate-900"
               >
-                Catat Pengeluaran Baru
+                Catat Pengeluaran
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
-                Pilih pembayaran langsung dari kas DANA atau talangan pribadi anggota.
+                Isi nominal, pilih kategori, tulis keterangan singkat. Selesai.
               </p>
             </div>
 
             <FeedbackBanner state={createExpenseState} />
 
-            <form action={createExpenseFormAction} className="space-y-3.5">
+            <form action={createExpenseFormAction} className="space-y-4">
               <input type="hidden" name="idempotencyKey" value={expenseKey} />
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label
-                    htmlFor="expense-date"
-                    className="block text-xs font-medium text-slate-700 mb-1"
-                  >
-                    Tanggal Transaksi
-                  </label>
-                  <input
-                    id="expense-date"
-                    type="date"
-                    name="expenseDate"
-                    defaultValue={todayIso}
-                    required
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 tabular-nums focus:border-teal-700 focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="expense-amount"
-                    className="block text-xs font-medium text-slate-700 mb-1"
-                  >
-                    Nominal (Rp)
-                  </label>
-                  <input
-                    id="expense-amount"
-                    type="number"
-                    name="amount"
-                    min={1}
-                    step={1}
-                    required
-                    placeholder="40000"
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 tabular-nums focus:border-teal-700 focus:outline-none"
-                  />
-                </div>
-              </div>
 
               <div>
                 <label
-                  htmlFor="expense-category"
+                  htmlFor="expense-amount"
                   className="block text-xs font-medium text-slate-700 mb-1"
                 >
-                  Kategori & Subkategori
+                  Nominal (Rp)
                 </label>
-                <select
-                  id="expense-category"
-                  name="categoryId"
+                <input
+                  id="expense-amount"
+                  type="number"
+                  inputMode="numeric"
+                  name="amount"
+                  min={1}
+                  step={1}
                   required
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-teal-700 focus:outline-none"
-                >
-                  <option value="">— Pilih Kategori —</option>
-                  {data.categories.groups.map((group) => {
-                    const activeSubs = group.subcategories.filter(
-                      (s) => s.isActive && group.parent.isActive
-                    );
-                    if (!group.parent.isActive && activeSubs.length === 0) {
-                      return null;
-                    }
-                    return (
-                      <optgroup
-                        key={group.parent.id}
-                        label={group.parent.name}
-                      >
-                        {group.parent.isActive && (
-                          <option value={group.parent.id}>
-                            {group.parent.name} (Umum)
-                          </option>
-                        )}
-                        {activeSubs.map((sub) => (
-                          <option key={sub.id} value={sub.id}>
-                            {group.parent.name} — {sub.name}
-                          </option>
-                        ))}
-                      </optgroup>
-                    );
-                  })}
-                </select>
+                  placeholder="25000"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-base font-semibold text-slate-900 tabular-nums placeholder:font-normal placeholder:text-slate-400 focus:border-teal-700 focus:outline-none"
+                />
               </div>
+
+              <fieldset>
+                <legend className="block text-xs font-medium text-slate-700 mb-1.5">
+                  Kategori
+                </legend>
+                {selectableCategories.length === 0 ? (
+                  <p className="text-xs text-slate-500">
+                    Belum ada kategori aktif. Tambahkan di bagian Kategori di
+                    bawah.
+                  </p>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    {selectableCategories.map((cat, index) => (
+                      <label key={cat.id} className="cursor-pointer">
+                        <input
+                          type="radio"
+                          name="categoryId"
+                          value={cat.id}
+                          required={index === 0}
+                          className="peer sr-only"
+                        />
+                        <span className="inline-flex items-center rounded-full border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 peer-checked:border-teal-700 peer-checked:bg-teal-700 peer-checked:text-white peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-teal-700">
+                          {cat.displayLabel}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </fieldset>
 
               <div>
                 <label
                   htmlFor="expense-title"
                   className="block text-xs font-medium text-slate-700 mb-1"
                 >
-                  Deskripsi Pengeluaran
+                  Keterangan
                 </label>
                 <input
                   id="expense-title"
@@ -663,38 +635,46 @@ export function ExpenseManagement({
                   required
                   minLength={3}
                   maxLength={120}
-                  placeholder="Contoh: Isi ulang 2 galon air minum"
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-teal-700 focus:outline-none"
+                  placeholder="Contoh: Galon 2x"
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-teal-700 focus:outline-none"
                 />
               </div>
 
-              <div>
-                <label
-                  htmlFor="expense-funding-source"
-                  className="block text-xs font-medium text-slate-700 mb-1"
-                >
-                  Metode Sumber Pembayaran
-                </label>
-                <select
-                  id="expense-funding-source"
-                  name="fundingSource"
-                  value={fundingSource}
-                  onChange={(e) =>
-                    setFundingSource(
-                      e.target.value as "DIRECT_CASH" | "MEMBER_ADVANCE"
-                    )
-                  }
-                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-teal-700 focus:outline-none"
-                >
-                  <option value="DIRECT_CASH">
-                    Dibayar langsung dari Kas {data.cashAccount.provider} (
-                    {data.cashAccount.custodianName})
-                  </option>
-                  <option value="MEMBER_ADVANCE">
-                    Ditalangi pribadi anggota (Member Advance / Reimburse)
-                  </option>
-                </select>
-              </div>
+              <fieldset>
+                <legend className="block text-xs font-medium text-slate-700 mb-1.5">
+                  Dibayar pakai
+                </legend>
+                <div className="grid grid-cols-2 gap-2">
+                  {(
+                    [
+                      {
+                        value: "DIRECT_CASH",
+                        label: `Kas ${data.cashAccount.provider}`,
+                      },
+                      { value: "MEMBER_ADVANCE", label: "Uang pribadi dulu" },
+                    ] as const
+                  ).map((opt) => (
+                    <label key={opt.value} className="cursor-pointer">
+                      <input
+                        type="radio"
+                        name="fundingSource"
+                        value={opt.value}
+                        checked={fundingSource === opt.value}
+                        onChange={() => setFundingSource(opt.value)}
+                        className="peer sr-only"
+                      />
+                      <span className="flex justify-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 peer-checked:border-teal-700 peer-checked:bg-teal-50 peer-checked:text-teal-900 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-teal-700">
+                        {opt.label}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                {fundingSource === "MEMBER_ADVANCE" && (
+                  <p className="mt-1.5 text-[11px] text-slate-500">
+                    Otomatis masuk daftar Reimbursement untuk diganti dari kas.
+                  </p>
+                )}
+              </fieldset>
 
               {fundingSource === "MEMBER_ADVANCE" && (
                 <div>
@@ -702,7 +682,7 @@ export function ExpenseManagement({
                     htmlFor="expense-advanced-by"
                     className="block text-xs font-medium text-slate-700 mb-1"
                   >
-                    Anggota yang Menalangi
+                    Siapa yang menalangi?
                   </label>
                   <select
                     id="expense-advanced-by"
@@ -720,88 +700,120 @@ export function ExpenseManagement({
                 </div>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label
-                    htmlFor="expense-confirm-status"
-                    className="block text-xs font-medium text-slate-700 mb-1"
+              <details className="group rounded-lg border border-slate-200/80 bg-slate-50/50">
+                <summary className="cursor-pointer select-none list-none px-3 py-2 text-xs font-medium text-slate-600 hover:text-slate-900 flex items-center justify-between">
+                  <span>Opsi lainnya (tanggal, catatan)</span>
+                  <span
+                    aria-hidden="true"
+                    className="text-slate-400 transition-transform group-open:rotate-180"
                   >
-                    Status Konfirmasi
+                    ▾
+                  </span>
+                </summary>
+                <div className="px-3 pb-3 pt-1 space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label
+                        htmlFor="expense-date"
+                        className="block text-xs font-medium text-slate-700 mb-1"
+                      >
+                        Tanggal
+                      </label>
+                      <input
+                        id="expense-date"
+                        type="date"
+                        name="expenseDate"
+                        defaultValue={todayIso}
+                        max={todayIso}
+                        required
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 tabular-nums focus:border-teal-700 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label
+                        htmlFor="expense-note"
+                        className="block text-xs font-medium text-slate-700 mb-1"
+                      >
+                        Catatan
+                      </label>
+                      <input
+                        id="expense-note"
+                        type="text"
+                        name="note"
+                        maxLength={200}
+                        placeholder="Opsional"
+                        className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 placeholder:text-slate-400 focus:border-teal-700 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                  <label className="flex items-start gap-2 text-xs text-slate-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      name="confirmStatus"
+                      value="PENDING"
+                      className="mt-0.5 h-3.5 w-3.5 rounded border-slate-300 accent-teal-700"
+                    />
+                    <span>
+                      Simpan dulu sebagai menunggu konfirmasi
+                      <span className="block text-[11px] text-slate-500">
+                        Belum mengurangi saldo sampai dikonfirmasi.
+                      </span>
+                    </span>
                   </label>
-                  <select
-                    id="expense-confirm-status"
-                    name="confirmStatus"
-                    defaultValue="CONFIRMED"
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-teal-700 focus:outline-none"
-                  >
-                    <option value="CONFIRMED">
-                      Langsung Konfirmasi (CONFIRMED)
-                    </option>
-                    <option value="PENDING">
-                      Simpan sebagai Menunggu (PENDING)
-                    </option>
-                  </select>
                 </div>
-
-                <div>
-                  <label
-                    htmlFor="expense-note"
-                    className="block text-xs font-medium text-slate-700 mb-1"
-                  >
-                    Catatan Tambahan (Opsional)
-                  </label>
-                  <input
-                    id="expense-note"
-                    type="text"
-                    name="note"
-                    maxLength={200}
-                    placeholder="No. resi / keterangan toko"
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs text-slate-900 focus:border-teal-700 focus:outline-none"
-                  />
-                </div>
-              </div>
+              </details>
 
               <button
                 type="submit"
                 disabled={isCreatingExpense}
-                className="w-full rounded-lg bg-teal-700 px-4 py-2.5 text-xs font-semibold text-white hover:bg-teal-800 disabled:opacity-60 transition-colors cursor-pointer"
+                className="w-full rounded-lg bg-teal-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-60 transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"
               >
-                {isCreatingExpense
-                  ? "Menyimpan Pengeluaran..."
-                  : "Simpan Pengeluaran"}
+                {isCreatingExpense ? "Menyimpan..." : "Simpan Pengeluaran"}
               </button>
             </form>
           </section>
 
-          {/* 2. Kelola Kategori & Subkategori Dinamis */}
-          <section
+          {/* 2. Kelola Kategori (jarang dipakai, disembunyikan secara default) */}
+          <details
             aria-labelledby="manage-categories-heading"
-            className="rounded-xl bg-white border border-slate-200/80 p-5 sm:p-6 space-y-4"
+            className="group rounded-xl bg-white border border-slate-200/80"
           >
-            <div>
-              <h2
-                id="manage-categories-heading"
-                className="text-sm font-semibold text-slate-900"
+            <summary className="cursor-pointer select-none list-none p-5 sm:p-6 flex items-center justify-between gap-3">
+              <div>
+                <h2
+                  id="manage-categories-heading"
+                  className="text-sm font-semibold text-slate-900"
+                >
+                  Kategori
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5 tabular-nums">
+                  {selectableCategories.length} kategori aktif · tambah atau
+                  nonaktifkan bila perlu
+                </p>
+              </div>
+              <span
+                aria-hidden="true"
+                className="text-slate-400 transition-transform group-open:rotate-180"
               >
-                Kategori & Subkategori Dinamis
-              </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Tambah kategori baru atau nonaktifkan kategori lama tanpa merusak histori transaksi.
-              </p>
-            </div>
+                ▾
+              </span>
+            </summary>
 
-            <FeedbackBanner state={createCategoryState} />
-            <FeedbackBanner state={toggleCategoryState} />
-            <FeedbackBanner state={deleteCategoryState} />
+            <div className="px-5 sm:px-6 pb-5 sm:pb-6 space-y-4">
+              <FeedbackBanner state={createCategoryState} />
+              <FeedbackBanner state={toggleCategoryState} />
+              <FeedbackBanner state={deleteCategoryState} />
 
-            <form action={createCategoryFormAction} className="space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
+              <form
+                action={createCategoryFormAction}
+                className="flex items-end gap-2"
+              >
+                <div className="flex-1 min-w-0">
                   <label
                     htmlFor="new-category-name"
                     className="block text-xs font-medium text-slate-700 mb-1"
                   >
-                    Nama Kategori / Subkategori
+                    Kategori baru
                   </label>
                   <input
                     id="new-category-name"
@@ -810,227 +822,207 @@ export function ExpenseManagement({
                     required
                     minLength={2}
                     maxLength={80}
-                    placeholder="Contoh: Gas LPG / Lampu"
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-teal-700 focus:outline-none"
+                    placeholder="Contoh: Iuran Sampah"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 placeholder:text-slate-400 focus:border-teal-700 focus:outline-none"
                   />
                 </div>
+                <button
+                  type="submit"
+                  disabled={isCreatingCategory}
+                  className="shrink-0 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-60 transition-colors cursor-pointer"
+                >
+                  {isCreatingCategory ? "Menambah..." : "Tambah"}
+                </button>
+              </form>
 
-                <div>
-                  <label
-                    htmlFor="new-category-parent"
-                    className="block text-xs font-medium text-slate-700 mb-1"
-                  >
-                    Induk Kategori (Opsional)
-                  </label>
-                  <select
-                    id="new-category-parent"
-                    name="parentId"
-                    defaultValue=""
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-teal-700 focus:outline-none"
-                  >
-                    <option value="">— Kategori Utama Baru —</option>
-                    {data.categories.groups.map((g) => (
-                      <option key={g.parent.id} value={g.parent.id}>
-                        Subkategori dari: {g.parent.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isCreatingCategory}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-60 transition-colors cursor-pointer"
-              >
-                {isCreatingCategory
-                  ? "Menambahkan..."
-                  : "Tambah Kategori / Subkategori"}
-              </button>
-            </form>
-
-            <div className="pt-2 border-t border-slate-200/70 max-h-64 overflow-y-auto divide-y divide-slate-200/60">
-              {data.categories.flatCategories.map((cat) => {
-                const canDelete =
-                  cat.expenseCount === 0 && cat.childrenCount === 0;
-                return (
-                  <div
-                    key={cat.id}
-                    className="py-2.5 flex items-center justify-between gap-3 text-xs"
-                  >
-                    <div className="min-w-0">
-                      <p
-                        className={`font-medium truncate ${
-                          cat.isActive ? "text-slate-800" : "text-slate-400"
-                        }`}
-                      >
-                        {cat.displayLabel}
-                      </p>
-                      <p className="text-[11px] text-slate-500 tabular-nums">
-                        {cat.expenseCount} transaksi ·{" "}
-                        {cat.isActive ? "Aktif" : "Nonaktif"}
-                      </p>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <form action={toggleCategoryFormAction}>
-                        <input
-                          type="hidden"
-                          name="categoryId"
-                          value={cat.id}
-                        />
-                        <input
-                          type="hidden"
-                          name="isActive"
-                          value={cat.isActive ? "false" : "true"}
-                        />
-                        <button
-                          type="submit"
-                          disabled={isTogglingCategory}
-                          className="rounded border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50 cursor-pointer"
+              <div className="pt-2 border-t border-slate-200/70 divide-y divide-slate-200/60">
+                {data.categories.flatCategories.map((cat) => {
+                  const canDelete =
+                    cat.expenseCount === 0 && cat.childrenCount === 0;
+                  return (
+                    <div
+                      key={cat.id}
+                      className="py-2.5 flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="min-w-0">
+                        <p
+                          className={`font-medium truncate ${
+                            cat.isActive ? "text-slate-800" : "text-slate-400"
+                          }`}
                         >
-                          {cat.isActive ? "Nonaktifkan" : "Aktifkan"}
-                        </button>
-                      </form>
+                          {cat.displayLabel}
+                        </p>
+                        <p className="text-[11px] text-slate-500 tabular-nums">
+                          {cat.expenseCount} transaksi
+                          {cat.isActive ? "" : " · Nonaktif"}
+                        </p>
+                      </div>
 
-                      {canDelete && (
-                        <form action={deleteCategoryFormAction}>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <form action={toggleCategoryFormAction}>
                           <input
                             type="hidden"
                             name="categoryId"
                             value={cat.id}
                           />
+                          <input
+                            type="hidden"
+                            name="isActive"
+                            value={cat.isActive ? "false" : "true"}
+                          />
                           <button
                             type="submit"
-                            disabled={isDeletingCategory}
-                            className="rounded border border-rose-200 px-2 py-1 text-[11px] font-medium text-rose-700 hover:bg-rose-50 cursor-pointer"
+                            disabled={isTogglingCategory}
+                            className="rounded border border-slate-200 px-2 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50 cursor-pointer"
                           >
-                            Hapus
+                            {cat.isActive ? "Nonaktifkan" : "Aktifkan"}
                           </button>
                         </form>
-                      )}
+
+                        {canDelete && (
+                          <form action={deleteCategoryFormAction}>
+                            <input
+                              type="hidden"
+                              name="categoryId"
+                              value={cat.id}
+                            />
+                            <button
+                              type="submit"
+                              disabled={isDeletingCategory}
+                              className="rounded border border-rose-200 px-2 py-1 text-[11px] font-medium text-rose-700 hover:bg-rose-50 cursor-pointer"
+                            >
+                              Hapus
+                            </button>
+                          </form>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
-          </section>
+          </details>
 
-          {/* 3. Rekonsiliasi Saldo Awal / Penyesuaian Buku Kas */}
-          <section
+          {/* 3. Saldo Awal & Penyesuaian (jarang dipakai, disembunyikan secara default) */}
+          <details
             aria-labelledby="ledger-adjustment-heading"
-            className="rounded-xl bg-white border border-slate-200/80 p-5 sm:p-6 space-y-4"
+            className="group rounded-xl bg-white border border-slate-200/80"
           >
-            <div>
-              <h2
-                id="ledger-adjustment-heading"
-                className="text-sm font-semibold text-slate-900"
+            <summary className="cursor-pointer select-none list-none p-5 sm:p-6 flex items-center justify-between gap-3">
+              <div>
+                <h2
+                  id="ledger-adjustment-heading"
+                  className="text-sm font-semibold text-slate-900"
+                >
+                  Saldo Awal & Penyesuaian Kas
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Dipakai sekali saat mulai, atau saat saldo perlu dikoreksi.
+                </p>
+              </div>
+              <span
+                aria-hidden="true"
+                className="text-slate-400 transition-transform group-open:rotate-180"
               >
-                Saldo Awal & Penyesuaian Buku Kas
-              </h2>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Catat saldo awal periode (OPENING_BALANCE) atau koreksi rekonsiliasi kas (ADJUSTMENT).
-              </p>
+                ▾
+              </span>
+            </summary>
+
+            <div className="px-5 sm:px-6 pb-5 sm:pb-6 space-y-4">
+              <FeedbackBanner state={adjState} />
+
+              <form action={adjFormAction} className="space-y-3">
+                <input type="hidden" name="idempotencyKey" value={adjKey} />
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label
+                      htmlFor="adj-category"
+                      className="block text-xs font-medium text-slate-700 mb-1"
+                    >
+                      Jenis
+                    </label>
+                    <select
+                      id="adj-category"
+                      name="category"
+                      defaultValue="OPENING_BALANCE"
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-teal-700 focus:outline-none"
+                    >
+                      <option value="OPENING_BALANCE">Saldo awal</option>
+                      <option value="ADJUSTMENT">Penyesuaian kas</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="adj-direction"
+                      className="block text-xs font-medium text-slate-700 mb-1"
+                    >
+                      Arah
+                    </label>
+                    <select
+                      id="adj-direction"
+                      name="direction"
+                      defaultValue="IN"
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-teal-700 focus:outline-none"
+                    >
+                      <option value="IN">Kas masuk (+)</option>
+                      <option value="OUT">Kas keluar (−)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label
+                      htmlFor="adj-amount"
+                      className="block text-xs font-medium text-slate-700 mb-1"
+                    >
+                      Nominal (Rp)
+                    </label>
+                    <input
+                      id="adj-amount"
+                      type="number"
+                      inputMode="numeric"
+                      name="amount"
+                      min={1}
+                      step={1}
+                      required
+                      placeholder="120000"
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 tabular-nums focus:border-teal-700 focus:outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="adj-desc"
+                      className="block text-xs font-medium text-slate-700 mb-1"
+                    >
+                      Keterangan
+                    </label>
+                    <input
+                      id="adj-desc"
+                      type="text"
+                      name="description"
+                      required
+                      minLength={3}
+                      maxLength={160}
+                      placeholder="Saldo awal kas DANA"
+                      className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-teal-700 focus:outline-none"
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isRecordingAdj}
+                  className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-60 transition-colors cursor-pointer"
+                >
+                  {isRecordingAdj ? "Menyimpan..." : "Simpan"}
+                </button>
+              </form>
             </div>
-
-            <FeedbackBanner state={adjState} />
-
-            <form action={adjFormAction} className="space-y-3">
-              <input type="hidden" name="idempotencyKey" value={adjKey} />
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label
-                    htmlFor="adj-category"
-                    className="block text-xs font-medium text-slate-700 mb-1"
-                  >
-                    Jenis Mutasi
-                  </label>
-                  <select
-                    id="adj-category"
-                    name="category"
-                    defaultValue="OPENING_BALANCE"
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-teal-700 focus:outline-none"
-                  >
-                    <option value="OPENING_BALANCE">
-                      Saldo Awal (OPENING_BALANCE)
-                    </option>
-                    <option value="ADJUSTMENT">
-                      Penyesuaian Kas (ADJUSTMENT)
-                    </option>
-                  </select>
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="adj-direction"
-                    className="block text-xs font-medium text-slate-700 mb-1"
-                  >
-                    Arah Arus Kas
-                  </label>
-                  <select
-                    id="adj-direction"
-                    name="direction"
-                    defaultValue="IN"
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-teal-700 focus:outline-none"
-                  >
-                    <option value="IN">Kas Masuk (+)</option>
-                    <option value="OUT">Kas Keluar (-)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label
-                    htmlFor="adj-amount"
-                    className="block text-xs font-medium text-slate-700 mb-1"
-                  >
-                    Nominal (Rp)
-                  </label>
-                  <input
-                    id="adj-amount"
-                    type="number"
-                    name="amount"
-                    min={1}
-                    step={1}
-                    required
-                    placeholder="120000"
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 tabular-nums focus:border-teal-700 focus:outline-none"
-                  />
-                </div>
-
-                <div>
-                  <label
-                    htmlFor="adj-desc"
-                    className="block text-xs font-medium text-slate-700 mb-1"
-                  >
-                    Keterangan Rekonsiliasi
-                  </label>
-                  <input
-                    id="adj-desc"
-                    type="text"
-                    name="description"
-                    required
-                    minLength={3}
-                    maxLength={160}
-                    placeholder="Saldo awal kas DANA"
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-xs text-slate-900 focus:border-teal-700 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={isRecordingAdj}
-                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-800 hover:bg-slate-50 disabled:opacity-60 transition-colors cursor-pointer"
-              >
-                {isRecordingAdj
-                  ? "Menyimpan Mutasi..."
-                  : "Simpan Mutasi Rekonsiliasi"}
-              </button>
-            </form>
-          </section>
+          </details>
         </div>
       </div>
     </div>

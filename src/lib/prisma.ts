@@ -5,9 +5,17 @@ function createPrismaClient(): PrismaClient {
   const connectionString = process.env.DATABASE_URL;
 
   if (!connectionString) {
-    throw new Error(
-      "Variabel environment DATABASE_URL belum diatur di dalam file .env."
-    );
+    // Fallback aman agar proses kompilasi 'next build' (static analysis) di Dockerfile tidak gagal
+    if (process.env.NODE_ENV === "production") {
+      console.warn(
+        "[KostKas Warning] Variabel DATABASE_URL tidak ditemukan di environment saat inisialisasi Prisma."
+      );
+    }
+    const adapter = new PrismaPg({
+      connectionString:
+        "postgresql://build_placeholder:build_placeholder@127.0.0.1:5432/build_placeholder",
+    });
+    return new PrismaClient({ adapter });
   }
 
   const adapter = new PrismaPg({ connectionString });

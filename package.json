@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "db:seed": "./node_modules/.bin/jiti prisma/seed.ts",
@@ -14,7 +14,8 @@
     "test:m6": "./node_modules/.bin/jiti src/lib/milestone6-expense-reimbursement.test.ts",
     "test:m7": "./node_modules/.bin/jiti src/lib/milestone7-reporting-budget-settings.test.ts",
     "test:m8": "./node_modules/.bin/jiti src/lib/milestone8-security-qa.test.ts",
-    "test:all": "npm run test:db && npm run test:m5 && npm run test:m6 && npm run test:m7 && npm run test:m8",
+    "test:m10": "./node_modules/.bin/jiti src/lib/milestone10-bootstrap.test.ts",
+    "test:all": "npm run test:db && npm run test:m5 && npm run test:m6 && npm run test:m7 && npm run test:m8 && npm run test:m10",
     "db:backup": "./scripts/db-backup.sh",
     "db:restore": "./scripts/db-restore.sh"
   },

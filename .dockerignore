@@ -1,0 +1,42 @@
+# Git
+.git
+.gitignore
+
+# Dependencies & Build artifacts
+node_modules
+.next
+out
+build
+dist
+
+# Environment & Secrets (DILARANG KERAS masuk ke Docker image)
+.env
+.env.*
+!.env.example
+!.env.production.example
+
+# Local databases & dumps
+*.db
+*.sqlite
+*.sqlite3
+*.dump
+*.sql.gz
+/backups/
+/data/
+
+# Logs & temp files
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+*.pem
+*.key
+*.tsbuildinfo
+
+# Documentation & IDE
+docs/
+.agents/
+.vscode/
+.idea/
+

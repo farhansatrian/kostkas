@@ -125,7 +125,7 @@ export function SettingsManagement({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="rounded-lg bg-slate-50/80 border border-slate-200/80 p-4">
               <p className="text-xs font-medium text-slate-500">
-                1. Saldo Tercatat KostKas (Ledger)
+                Saldo Tercatat Buku Besar
               </p>
               <p className="mt-1.5 text-2xl font-semibold text-slate-900 tabular-nums">
                 {formatRupiah(data.cashAccount.recordedLedgerBalance)}
@@ -141,7 +141,7 @@ export function SettingsManagement({
                 htmlFor="manual-dana-balance"
                 className="block text-xs font-medium text-slate-700"
               >
-                2. Input Saldo DANA Aktual (Baca Manual)
+                Input Saldo DANA Riil
               </label>
               <input
                 id="manual-dana-balance"
@@ -152,13 +152,13 @@ export function SettingsManagement({
                 className="mt-1.5 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-lg font-semibold text-slate-900 tabular-nums focus:border-teal-700 focus:outline-none"
               />
               <p className="mt-1 text-[11px] text-slate-500">
-                Masukkan angka bulat Rupiah sesuai layar aplikasi DANA.
+                Masukkan angka bulat Rupiah sesuai saldo aplikasi DANA.
               </p>
             </div>
 
             <div className="rounded-lg bg-slate-50/80 border border-slate-200/80 p-4">
               <p className="text-xs font-medium text-slate-500">
-                3. Selisih Rekonsiliasi (DANA - Ledger)
+                Selisih Rekonsiliasi
               </p>
               {reconciliation ? (
                 <>
@@ -206,7 +206,7 @@ export function SettingsManagement({
           <div className="pt-4 border-t border-slate-200/80 space-y-3">
             <div>
               <h3 className="text-xs font-semibold text-slate-900">
-                Jurnal Koreksi Rekonsiliasi (CashMovement ADJUSTMENT)
+                Jurnal Penyesuaian Kas
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
                 Sistem tidak mengubah saldo secara otomatis. Jika terdapat selisih yang sah, catat jurnal penyesuaian dengan alasan wajib di bawah ini.
@@ -309,7 +309,7 @@ export function SettingsManagement({
                 id="cash-settings-heading"
                 className="text-sm font-semibold text-slate-900"
               >
-                Bagian A — Pengaturan Kas Kost & Cash Custodian
+                Pengaturan Kas & Cash Custodian
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
                 Seluruh anggota aktif memiliki hak akses setara. Cash Custodian adalah penanggung jawab dompet DANA operasional, bukan superadmin.
@@ -433,7 +433,7 @@ export function SettingsManagement({
                 id="app-preferences-heading"
                 className="text-sm font-semibold text-slate-900"
               >
-                Bagian D — Preferensi Standar Aplikasi
+                Preferensi Standar Aplikasi
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
                 Standar mata uang, zona waktu akuntansi, dan format tampilan tanggal.
@@ -509,7 +509,7 @@ export function SettingsManagement({
                 id="contribution-settings-heading"
                 className="text-sm font-semibold text-slate-900"
               >
-                Bagian B — Kebijakan Tarif Iuran Bulanan
+                Kebijakan Tarif Iuran Bulanan
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
                 Perubahan tarif berlaku mulai periode efektif yang dipilih dan tidak mengubah nominal tagihan historis secara retroaktif.
@@ -627,7 +627,7 @@ export function SettingsManagement({
                 id="account-settings-heading"
                 className="text-sm font-semibold text-slate-900"
               >
-                Bagian C — Pengaturan Akun & Keamanan Sesi
+                Pengaturan Akun & Keamanan Sesi
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
                 Anda masuk sebagai{" "}
@@ -748,7 +748,7 @@ export function SettingsManagement({
                 id="activity-log-heading"
                 className="text-sm font-semibold text-slate-900"
               >
-                Riwayat Aktivitas & Transparansi (AuditLog)
+                Riwayat Aktivitas & Audit Log
               </h2>
               <p className="text-xs text-slate-500 mt-0.5">
                 Jejak audit seluruh transaksi kas, perubahan anggaran, kebijakan tarif, dan pengaturan aplikasi.

@@ -36,14 +36,24 @@ fi
 
 echo "[KostKas Restore] Memulai proses pemulihan dari: $BACKUP_FILE..."
 
-# Mode 1: Restore ke kontainer Docker kostkas-db
-if command -v docker >/dev/null 2>&1 && docker ps --format '{{.Names}}' | grep -q "^kostkas-db$"; then
-  echo "[KostKas Restore] Memulihkan ke kontainer Docker 'kostkas-db'..."
-  CONTAINER_USER=$(docker exec kostkas-db printenv POSTGRES_USER || echo "kostkas_app")
-  CONTAINER_DB="${TARGET_DATABASE:-$(docker exec kostkas-db printenv POSTGRES_DB || echo "kostkas_db")}"
+# Deteksi kontainer PostgreSQL yang sedang aktif (kostkas-prod-db atau kostkas-db)
+CONTAINER_TARGET="${POSTGRES_CONTAINER_NAME:-}"
+if [ -z "$CONTAINER_TARGET" ] && command -v docker >/dev/null 2>&1; then
+  if docker ps --format '{{.Names}}' | grep -q "^kostkas-prod-db$"; then
+    CONTAINER_TARGET="kostkas-prod-db"
+  elif docker ps --format '{{.Names}}' | grep -q "^kostkas-db$"; then
+    CONTAINER_TARGET="kostkas-db"
+  fi
+fi
 
-  gunzip -c "$BACKUP_FILE" | docker exec -i kostkas-db psql -U "$CONTAINER_USER" -d "$CONTAINER_DB"
-  echo "[KostKas Restore SUKSES] Database '$CONTAINER_DB' berhasil dipulihkan dari $BACKUP_FILE."
+# Mode 1: Restore ke kontainer Docker PostgreSQL
+if [ -n "$CONTAINER_TARGET" ]; then
+  echo "[KostKas Restore] Memulihkan ke kontainer Docker '${CONTAINER_TARGET}'..."
+  CONTAINER_USER=$(docker exec "$CONTAINER_TARGET" printenv POSTGRES_USER || echo "kostkas_app")
+  CONTAINER_DB="${TARGET_DATABASE:-$(docker exec "$CONTAINER_TARGET" printenv POSTGRES_DB || echo "kostkas_db")}"
+
+  gunzip -c "$BACKUP_FILE" | docker exec -i "$CONTAINER_TARGET" psql -U "$CONTAINER_USER" -d "$CONTAINER_DB"
+  echo "[KostKas Restore SUKSES] Database '$CONTAINER_DB' di kontainer '${CONTAINER_TARGET}' berhasil dipulihkan dari $BACKUP_FILE."
 
 # Mode 2: Restore via DATABASE_URL lokal
 elif command -v psql >/dev/null 2>&1 && [ -n "${TARGET_DATABASE_URL:-${DATABASE_URL:-}}" ]; then
@@ -53,7 +63,6 @@ elif command -v psql >/dev/null 2>&1 && [ -n "${TARGET_DATABASE_URL:-${DATABASE_
   echo "[KostKas Restore SUKSES] Database berhasil dipulihkan dari $BACKUP_FILE."
 
 else
-  echo "[KostKas Restore ERROR] Tidak dapat menemukan kontainer 'kostkas-db' atau binary psql." >&2
+  echo "[KostKas Restore ERROR] Tidak dapat menemukan kontainer PostgreSQL atau binary psql." >&2
   exit 1
 fi
-

@@ -46,10 +46,10 @@ async function SettingsContent({
         <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-2">
           <div>
             <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-slate-900">
-              Pengaturan Aplikasi, Rekonsiliasi & Audit Log
+              Pengaturan Aplikasi & Audit Log
             </h1>
             <p className="text-sm text-slate-600 mt-0.5">
-              Konfigurasi akun kas DANA, kebijakan tarif iuran, keamanan akun, rekonsiliasi manual, dan riwayat aktivitas.
+              Konfigurasi kas bersama, kebijakan tarif iuran, preferensi, dan riwayat aktivitas transaksi.
             </p>
           </div>
 

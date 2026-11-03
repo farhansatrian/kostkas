@@ -44,9 +44,14 @@ export async function setSessionCookie(
   expiresAt: Date
 ): Promise<void> {
   const cookieStore = await cookies();
+  const isSecure =
+    process.env.COOKIE_SECURE !== undefined
+      ? process.env.COOKIE_SECURE === "true"
+      : process.env.NODE_ENV === "production";
+
   cookieStore.set(SESSION_COOKIE_NAME, sessionToken, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: isSecure,
     sameSite: "lax",
     expires: expiresAt,
     path: "/",

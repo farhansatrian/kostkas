@@ -74,6 +74,7 @@ export interface CategoryBudgetComparisonItem {
   effectiveBudgetAmount: number;
   directRealizedAmount: number;
   inclusiveRealizedAmount: number;
+  previousRealizedAmount: number;
   remainingBalance: number;
   remainingAvailableAmount: number;
   overBudgetAmount: number;
@@ -90,6 +91,8 @@ export interface ParentCategoryBudgetGroup {
 export interface BudgetPageData {
   period: string;
   periodLabel: string;
+  previousPeriod: string;
+  previousPeriodLabel: string;
   availablePeriods: Array<{ value: string; label: string }>;
   cashAccount: {
     id: string;
@@ -101,6 +104,9 @@ export interface BudgetPageData {
   monthlyBudget: {
     id: string | null;
     period: string;
+    previousPeriod: string;
+    previousPeriodLabel: string;
+    previousTotalRealizedAmount: number;
     configuredTotalAmount: number;
     allocatedCategoriesTotal: number;
     effectiveTotalBudget: number;
@@ -313,7 +319,10 @@ export async function getBudgetPageData(
       ? rawPeriod.trim()
       : currentPeriod;
 
+  const previousPeriod = shiftYearMonthPeriod(targetPeriod, -1);
   const { startUtc, endUtc } = getJakartaPeriodBounds(targetPeriod);
+  const { startUtc: prevStartUtc, endUtc: prevEndUtc } =
+    getJakartaPeriodBounds(previousPeriod);
 
   const [
     cashAccount,
@@ -321,6 +330,7 @@ export async function getBudgetPageData(
     monthlyBudgetRecord,
     allBudgetPeriods,
     confirmedPeriodExpenses,
+    confirmedPreviousPeriodExpenses,
   ] = await Promise.all([
     db.cashAccount.findFirst({
       where: { isActive: true },
@@ -356,6 +366,20 @@ export async function getBudgetPageData(
         categoryId: true,
         amount: true,
         fundingSource: true,
+      },
+    }),
+    db.expense.findMany({
+      where: {
+        status: "CONFIRMED",
+        expenseDate: {
+          gte: prevStartUtc,
+          lt: prevEndUtc,
+        },
+      },
+      select: {
+        id: true,
+        categoryId: true,
+        amount: true,
       },
     }),
   ]);
@@ -394,6 +418,17 @@ export async function getBudgetPageData(
     );
   }
 
+  // Petakan realisasi bulan sebelumnya (previous period) sebagai acuan historis
+  const previousRealizedMap = new Map<string, number>();
+  let previousTotalRealizedAmount = 0;
+  for (const exp of confirmedPreviousPeriodExpenses) {
+    previousTotalRealizedAmount += exp.amount;
+    previousRealizedMap.set(
+      exp.categoryId,
+      (previousRealizedMap.get(exp.categoryId) ?? 0) + exp.amount
+    );
+  }
+
   const parentCategories = categories.filter((c) => c.parentId === null);
   const childCategoriesByParent = new Map<string, typeof categories>();
   for (const cat of categories) {
@@ -409,7 +444,8 @@ export async function getBudgetPageData(
     directBudget: number,
     effectiveBudget: number,
     directRealized: number,
-    inclusiveRealized: number
+    inclusiveRealized: number,
+    previousRealized: number
   ): CategoryBudgetComparisonItem {
     const remainingBalance = effectiveBudget - inclusiveRealized;
     const remainingAvailableAmount = Math.max(0, remainingBalance);
@@ -436,6 +472,7 @@ export async function getBudgetPageData(
       effectiveBudgetAmount: effectiveBudget,
       directRealizedAmount: directRealized,
       inclusiveRealizedAmount: inclusiveRealized,
+      previousRealizedAmount: previousRealized,
       remainingBalance,
       remainingAvailableAmount,
       overBudgetAmount,
@@ -455,30 +492,35 @@ export async function getBudgetPageData(
 
     let childrenBudgetSum = 0;
     let childrenRealizedSum = 0;
+    let childrenPreviousSum = 0;
 
     for (const child of children) {
       const cBudget = directBudgetMap.get(child.id) ?? 0;
       const cRealized = directRealizedMap.get(child.id) ?? 0;
+      const cPrevious = previousRealizedMap.get(child.id) ?? 0;
       childrenBudgetSum += cBudget;
       childrenRealizedSum += cRealized;
+      childrenPreviousSum += cPrevious;
 
       const subItem = buildCategoryItem(
         child,
         cBudget,
         cBudget,
         cRealized,
-        cRealized
+        cRealized,
+        cPrevious
       );
       subItems.push(subItem);
     }
 
     const pDirectBudget = directBudgetMap.get(parent.id) ?? 0;
     const pDirectRealized = directRealizedMap.get(parent.id) ?? 0;
+    const pDirectPrevious = previousRealizedMap.get(parent.id) ?? 0;
 
     // Hindari perhitungan ganda antara induk dan subkategori:
-    // Jika induk memiliki plafon anggaran yang menaungi subkategori, gunakan nilai terbesar antara plafon induk vs jumlah subkategori.
     const pEffectiveBudget = Math.max(pDirectBudget, childrenBudgetSum);
     const pInclusiveRealized = pDirectRealized + childrenRealizedSum;
+    const pInclusivePrevious = pDirectPrevious + childrenPreviousSum;
 
     allocatedCategoriesTotal += pEffectiveBudget;
 
@@ -487,7 +529,8 @@ export async function getBudgetPageData(
       pDirectBudget,
       pEffectiveBudget,
       pDirectRealized,
-      pInclusiveRealized
+      pInclusiveRealized,
+      pInclusivePrevious
     );
 
     categoryGroups.push({
@@ -536,6 +579,8 @@ export async function getBudgetPageData(
   return {
     period: targetPeriod,
     periodLabel: formatPeriodLabel(targetPeriod),
+    previousPeriod,
+    previousPeriodLabel: formatPeriodLabel(previousPeriod),
     availablePeriods,
     cashAccount: {
       id: cashAccount.id,
@@ -547,6 +592,9 @@ export async function getBudgetPageData(
     monthlyBudget: {
       id: monthlyBudgetRecord?.id ?? null,
       period: targetPeriod,
+      previousPeriod,
+      previousPeriodLabel: formatPeriodLabel(previousPeriod),
+      previousTotalRealizedAmount,
       configuredTotalAmount,
       allocatedCategoriesTotal,
       effectiveTotalBudget,

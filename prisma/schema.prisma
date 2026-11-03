@@ -366,7 +366,7 @@ model MonthlyBudgetAllocation {
 /// Preferensi dan konfigurasi umum aplikasi KostKas.
 model AppPreference {
   id           String   @id @default("default")
-  kostName     String   @default("KostKas Bersama")
+  kostName     String   @default("KostKas")
   currencyCode String   @default("IDR")
   timezone     String   @default("Asia/Jakarta")
   dateFormat   String   @default("dd MMM yyyy")

@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
+import { InfoTooltip } from "@/components/info-tooltip";
 import {
   AdditionalChargeForm,
   FuturePolicyForm,
@@ -58,9 +59,16 @@ async function MonthlyContributionsContent({
         {/* Header & Pemilih Periode */}
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div>
-            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-slate-900">
-              Iuran Bulanan
-            </h1>
+            <div className="flex items-center gap-1.5">
+              <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-slate-900">
+                Iuran Bulanan
+              </h1>
+              <InfoTooltip
+                title="Iuran Bulanan Kost"
+                content="Iuran rutin yang dikumpulkan dari seluruh anggota kost setiap bulan untuk operasional kas bersama (galon, gas, listrik, wi-fi, kebersihan, dan perbaikan)."
+                label="Info iuran bulanan"
+              />
+            </div>
             <p className="text-sm text-slate-600 mt-0.5 tabular-nums">
               Periode {data.periodLabel} · Tarif efektif{" "}
               {data.effectivePolicy
@@ -103,9 +111,15 @@ async function MonthlyContributionsContent({
         >
           <dl className="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-slate-200/80">
             <div className="p-5">
-              <dt className="text-xs font-medium text-slate-500">
-                Total tagihan periode ({data.period})
-              </dt>
+              <div className="flex items-center justify-between">
+                <dt className="text-xs font-medium text-slate-500">
+                  Total tagihan periode ({data.period})
+                </dt>
+                <InfoTooltip
+                  content="Total kewajiban yang dibebankan kepada anggota, terdiri dari iuran rutin bulanan dan tagihan khusus jika ada."
+                  label="Info total tagihan"
+                />
+              </div>
               <dd className="mt-1 text-2xl font-semibold tracking-tight text-slate-900 tabular-nums">
                 {formatRupiah(data.obligationSummary.totalBilled)}
               </dd>
@@ -116,9 +130,15 @@ async function MonthlyContributionsContent({
             </div>
 
             <div className="p-5">
-              <dt className="text-xs font-medium text-slate-500">
-                Realisasi pembayaran masuk
-              </dt>
+              <div className="flex items-center justify-between">
+                <dt className="text-xs font-medium text-slate-500">
+                  Realisasi pembayaran masuk
+                </dt>
+                <InfoTooltip
+                  content="Total uang iuran yang sudah benar-benar masuk dan terkonfirmasi di rekening DANA Kas."
+                  label="Info realisasi iuran"
+                />
+              </div>
               <dd className="mt-1 text-2xl font-semibold tracking-tight text-emerald-700 tabular-nums">
                 {formatRupiah(data.obligationSummary.totalAllocated)}
               </dd>
@@ -128,9 +148,15 @@ async function MonthlyContributionsContent({
             </div>
 
             <div className="p-5">
-              <dt className="text-xs font-medium text-slate-500">
-                Sisa kewajiban belum lunas
-              </dt>
+              <div className="flex items-center justify-between">
+                <dt className="text-xs font-medium text-slate-500">
+                  Sisa kewajiban belum lunas
+                </dt>
+                <InfoTooltip
+                  content="Sisa tagihan iuran yang masih belum dilunasi oleh anggota pada periode ini."
+                  label="Info sisa tagihan"
+                />
+              </div>
               <dd className="mt-1 text-2xl font-semibold tracking-tight text-slate-900 tabular-nums">
                 {formatRupiah(data.obligationSummary.totalRemaining)}
               </dd>

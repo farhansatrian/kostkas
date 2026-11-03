@@ -2,8 +2,17 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   /* config options here */
+  output: "standalone",
   cacheComponents: true,
   partialPrefetching: true,
+  experimental: {
+    serverActions: {
+      allowedOrigins: [
+        "vm-kebonkacang.supercomfy.dev",
+        "localhost:3000",
+      ],
+    },
+  },
   turbopack: {
     rules: {
       "*.css": {

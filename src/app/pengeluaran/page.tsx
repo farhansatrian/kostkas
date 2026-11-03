@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
+import { InfoTooltip } from "@/components/info-tooltip";
 import { ExpenseManagement } from "@/components/expense-management";
 import { getKostAppPreferences } from "@/lib/app-preferences";
 import { getExpensesPageData } from "@/lib/expense-reimbursement-service";
@@ -49,11 +50,18 @@ async function ExpensesContent({
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-10 py-6 sm:py-10 space-y-8">
         <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-2">
           <div>
-            <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-slate-900">
-              Pengeluaran Kas & Operasional
-            </h1>
+            <div className="flex items-center gap-1.5">
+              <h1 className="text-xl sm:text-2xl font-semibold tracking-tight text-slate-900">
+                Pengeluaran Kas
+              </h1>
+              <InfoTooltip
+                title="Pencatatan Pengeluaran Kas"
+                content="Catat semua belanja kebutuhan bersama. Jika dibayar memakai uang kas DANA, saldo kas berkurang langsung. Jika ditalangi anggota, sistem otomatis mencatatnya sebagai piutang reimbursement anggota."
+                label="Info pengeluaran kas"
+              />
+            </div>
             <p className="text-sm text-slate-600 mt-0.5">
-              Pencatatan pengeluaran kas langsung DANA, talangan anggota, dan kategori dinamis.
+              Pencatatan belanja kas langsung DANA dan talangan anggota.
             </p>
           </div>
 
@@ -61,7 +69,7 @@ async function ExpensesContent({
             href="/reimbursement"
             className="inline-flex items-center self-start sm:self-auto rounded-lg border border-slate-200/80 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
           >
-            Kelola klaim reimbursement
+            Kelola reimbursement &rarr;
           </Link>
         </div>
 
